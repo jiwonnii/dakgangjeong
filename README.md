@@ -1,12 +1,13 @@
-# Meoksa Backend
+# Meoksa
 
-TypeScript + Node.js + Express API server for the Meoksa MVP.
+Next.js App Router app for the Meoksa MVP. The UI and API run together on
+`http://localhost:3000`.
 
 ## Stack
 
 - TypeScript
 - Node.js
-- Express
+- Next.js
 - Supabase Auth
 - Supabase Postgres + PostGIS
 
@@ -22,11 +23,65 @@ TypeScript + Node.js + Express API server for the Meoksa MVP.
 ## Scripts
 
 ```bash
+npm.cmd install
 npm.cmd run dev
 npm.cmd run breeds:generate
 npm.cmd run check
+npm.cmd run check:jobs
+npm.cmd run db:check
 npm.cmd run build
-npm.cmd start
+npm.cmd run start
+```
+
+## Teammate setup
+
+Use this when pulling this branch into another local copy for feature merge work.
+
+```bash
+git fetch origin
+git switch -c merge-meoksa origin/backend_jiwon_share
+npm.cmd install
+copy .env.example .env
+```
+
+Fill `.env` with the shared local values. The real `.env` and `.env.local` files
+are intentionally not committed.
+
+Required for normal app/API work:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `DATABASE_URL`
+- `KAKAO_MAP_APP_KEY`
+
+Required for walk recommendation/demo quality:
+
+- `GRAPHHOPPER_URL=http://localhost:8989`
+- local GraphHopper instance running with the project's custom foot profile
+- `PUBLIC_DATA_API_KEY`
+- `TMAP_APP_KEY`
+- `VWORLD_API_KEY`
+- recommendation seed/ingest data loaded into Supabase
+
+Optional:
+
+- `OPENAI_API_KEY`
+- `KAKAO_REST_API_KEY`
+
+After filling `.env`, run:
+
+```bash
+npm.cmd run check
+npm.cmd run check:jobs
+npm.cmd run db:check
+npm.cmd run dev
+```
+
+Current app entry:
+
+```text
+app/page.tsx -> app/main/main-tab.tsx
 ```
 
 ## API
@@ -60,7 +115,8 @@ npm.cmd start
 
 ## Environment
 
-Copy `.env.example` to `.env` and fill in Supabase values.
+Copy `.env.example` to `.env` and fill in the shared local values. Do not commit
+`.env`, `.env.local`, or raw secrets.
 
 ## Database
 
@@ -68,7 +124,17 @@ Run these files in the Supabase SQL Editor, in order, after creating a project.
 
 1. `supabase/migrations/0001_init.sql`
 2. `supabase/migrations/0002_onboarding_survey_consent.sql`
-3. `supabase/dog_breeds_seed.sql`
+3. `supabase/migrations/0003_walk_recommendation.sql`
+4. `supabase/migrations/0004_bearing_grid_function.sql`
+5. `supabase/migrations/0005_park_polygon_lookup.sql`
+6. `supabase/migrations/0006_score_route_candidates.sql`
+7. `supabase/migrations/0007_road_overlay_matching.sql`
+8. `supabase/migrations/0008_bearing_grid_index_fix.sql`
+9. `supabase/migrations/0009_scoring_index_fix.sql`
+10. `supabase/migrations/0010_walk_records_route_geojson.sql`
+11. `supabase/migrations/0011_care_recurring_routines.sql`
+12. `supabase/migrations/0012_walk_records_recommended_course.sql`
+13. `supabase/dog_breeds_seed.sql`
 
 Every migration is idempotent, so re-running one is safe.
 
