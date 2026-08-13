@@ -16,11 +16,37 @@ const geoJsonLineStringSchema = z.object({
   coordinates: z.array(z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]))
 });
 
+export const reviewFactorSchema = z.enum([
+  "riskZones",
+  "vehicleExposure",
+  "pedestrianSafety",
+  "environment",
+  "familiarity",
+  "fit"
+]);
+
+const recommendedCourseExplanationFactorSchema = z.object({
+  key: reviewFactorSchema,
+  label: z.string().trim().min(1).max(80),
+  score: z.number().optional(),
+  weight: z.number().optional(),
+  contribution: z.number().optional(),
+  detail: z.string().max(1000).optional(),
+  preferenceAdjustment: z.number().optional()
+});
+
 export const recommendedCourseSchema = z.object({
   rank: z.number().int().min(1),
   direction: z.string().trim().min(1).max(40).optional(),
   distanceMeters: z.number().int().min(0),
   durationMinutes: z.number().int().min(0),
+  score: z.number().optional(),
+  aiExplanation: z.string().max(1000).optional(),
+  explanation: z.object({
+    summary: z.string().max(1000).optional(),
+    factors: z.array(recommendedCourseExplanationFactorSchema).optional()
+  }).optional(),
+  facts: z.record(z.string(), z.unknown()).optional(),
   path: geoJsonLineStringSchema
 });
 
@@ -48,6 +74,8 @@ export const finishWalkRecordSchema = z.object({
   durationSeconds: z.number().int().min(0),
   path: z.array(coordinateSchema).min(0).default([]),
   rating: z.number().int().min(1).max(5).optional(),
+  likedFactor: reviewFactorSchema.optional(),
+  dislikedFactor: reviewFactorSchema.optional(),
   likedNotes: z.string().max(1000).optional(),
   dislikedNotes: z.string().max(1000).optional(),
   staticMapUrl: z.string().url().optional()
@@ -64,6 +92,8 @@ export const manualWalkRecordSchema = z.object({
   distanceMeters: z.number().int().min(0),
   durationSeconds: z.number().int().min(1),
   rating: z.number().int().min(1).max(5).optional(),
+  likedFactor: reviewFactorSchema.optional(),
+  dislikedFactor: reviewFactorSchema.optional(),
   likedNotes: z.string().max(1000).optional(),
   dislikedNotes: z.string().max(1000).optional()
 });

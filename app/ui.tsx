@@ -3,14 +3,14 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/src/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 rounded-md text-sm font-extrabold transition-colors disabled:pointer-events-none disabled:opacity-55",
+  "inline-flex items-center justify-center gap-2 rounded-full text-sm font-bold transition-colors disabled:pointer-events-none disabled:opacity-55",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        secondary: "bg-muted text-foreground hover:bg-muted/80",
-        outline: "border border-border bg-white hover:bg-muted",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+        default: "bg-ms-brand text-ms-on-brand active:bg-ms-brand-pressed",
+        secondary: "bg-ms-sunken text-ms-ink active:bg-ms-line",
+        outline: "border border-ms-line bg-ms-card text-ms-ink active:bg-ms-sunken",
+        destructive: "bg-ms-warn-bg text-ms-warn-fg active:bg-ms-warn-bg"
       },
       size: {
         default: "h-11 px-4",
@@ -40,7 +40,7 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
   ({ className, ...props }, ref) => (
     <input
       className={cn(
-        "h-11 w-full rounded-md border border-border bg-white px-3 text-sm font-semibold outline-none transition focus:border-primary disabled:cursor-not-allowed disabled:opacity-60",
+        "h-11 w-full rounded-2xl border border-ms-line bg-ms-card px-3 text-sm font-semibold text-ms-ink outline-none transition focus:border-ms-brand disabled:cursor-not-allowed disabled:opacity-60",
         className
       )}
       ref={ref}
@@ -53,7 +53,7 @@ Input.displayName = "Input";
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("rounded-lg border border-border bg-white shadow-sm", className)}
+      className={cn("rounded-2xl border border-ms-line bg-ms-card shadow-sm", className)}
       {...props}
     />
   );
@@ -64,7 +64,7 @@ export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDiv
 }
 
 export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn("text-lg font-black", className)} {...props} />;
+  return <h2 className={cn("text-lg font-black text-ms-ink", className)} {...props} />;
 }
 
 export function CardContent({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {

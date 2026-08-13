@@ -31,6 +31,8 @@ type WalkRecordRow = {
   rating: number | null;
   liked_notes: string | null;
   disliked_notes: string | null;
+  liked_factor: string | null;
+  disliked_factor: string | null;
   ai_summary: string | null;
   created_at: string;
 };
@@ -46,7 +48,7 @@ type GeoJsonLineString = {
 };
 
 const WALK_RECORD_SELECT =
-  "id, dog_id, user_id, started_at, ended_at, distance_meters, duration_seconds, average_speed_mps, route, route_geojson, recommended_course, static_map_url, rating, liked_notes, disliked_notes, ai_summary, created_at";
+  "id, dog_id, user_id, started_at, ended_at, distance_meters, duration_seconds, average_speed_mps, route, route_geojson, recommended_course, static_map_url, rating, liked_notes, disliked_notes, liked_factor, disliked_factor, ai_summary, created_at";
 
 function getAuthUserId(req: Parameters<RequestHandler>[0]): string {
   if (!req.authUser?.id) {
@@ -115,6 +117,8 @@ function toWalkRecord(row: WalkRecordRow) {
     rating: row.rating,
     likedNotes: row.liked_notes,
     dislikedNotes: row.disliked_notes,
+    likedFactor: row.liked_factor,
+    dislikedFactor: row.disliked_factor,
     aiSummary: row.ai_summary,
     createdAt: row.created_at
   };
@@ -297,6 +301,8 @@ export const finishWalkRecord: RequestHandler = async (req, res, next) => {
       rating: body.rating,
       likedNotes: body.likedNotes,
       dislikedNotes: body.dislikedNotes,
+      likedFactor: body.likedFactor,
+      dislikedFactor: body.dislikedFactor,
       pointCount: body.path.length,
       isManual: false
     });
@@ -313,6 +319,8 @@ export const finishWalkRecord: RequestHandler = async (req, res, next) => {
         rating: body.rating ?? null,
         liked_notes: body.likedNotes ?? null,
         disliked_notes: body.dislikedNotes ?? null,
+        liked_factor: body.likedFactor ?? null,
+        disliked_factor: body.dislikedFactor ?? null,
         ai_summary: aiSummary
       })
       .eq("id", walkRecordId)
@@ -404,6 +412,8 @@ export const createManualWalkRecord: RequestHandler = async (req, res, next) => 
       rating: body.rating,
       likedNotes: body.likedNotes,
       dislikedNotes: body.dislikedNotes,
+      likedFactor: body.likedFactor,
+      dislikedFactor: body.dislikedFactor,
       isManual: true
     });
 
@@ -420,6 +430,8 @@ export const createManualWalkRecord: RequestHandler = async (req, res, next) => 
         rating: body.rating ?? null,
         liked_notes: body.likedNotes ?? null,
         disliked_notes: body.dislikedNotes ?? null,
+        liked_factor: body.likedFactor ?? null,
+        disliked_factor: body.dislikedFactor ?? null,
         ai_summary: aiSummary
       })
       .select(WALK_RECORD_SELECT)
