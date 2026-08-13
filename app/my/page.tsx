@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { CalendarDays, ChevronRight } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../auth-context";
 import type { BreedOption, OnboardingStatus, OptionItem } from "../lib/types";
@@ -227,6 +229,16 @@ export default function MyTabPage() {
       </header>
       {message ? <p className="rounded-md bg-primary/10 p-3 text-sm font-extrabold text-primary">{message}</p> : null}
       {errorMessage ? <p className="rounded-md bg-destructive/10 p-3 text-sm font-extrabold text-destructive">{errorMessage}</p> : null}
+
+      <Link
+        className="flex items-center justify-between rounded-2xl border border-ms-line bg-ms-card p-4 text-sm font-black text-ms-ink shadow-sm"
+        href="/records"
+      >
+        <span className="flex items-center gap-2">
+          <CalendarDays size={19} /> 산책 기록 보기
+        </span>
+        <ChevronRight size={18} className="text-ms-muted" />
+      </Link>
 
       <Card>
         <CardHeader>

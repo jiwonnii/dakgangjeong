@@ -90,6 +90,11 @@ export const expectedSchema: SchemaExpectation[] = [
     migration: "migrations/0012_walk_records_recommended_course.sql"
   },
   {
+    table: "walk_records",
+    columns: ["liked_factor", "disliked_factor"],
+    migration: "migrations/0013_walk_records_review_factors.sql"
+  },
+  {
     table: "care_tasks",
     columns: [
       "id",

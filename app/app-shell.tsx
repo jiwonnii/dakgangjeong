@@ -1,41 +1,41 @@
 "use client";
 
-import { CalendarDays, Footprints, Home, UserRound, Users } from "lucide-react";
+import { LayoutGrid, PawPrint, Share2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "./auth-context";
 import { AuthScreen } from "./auth-screen";
 import { OnboardingScreen } from "./onboarding-screen";
 
+// 3탭 구성 (meoksa_FE 디자인 기준). "산책하기"는 메인 화면의 CTA로, "기록"은
+// 마이페이지에서 링크로 들어간다 — 탭 자체는 아니다.
 const TABS = [
-  { href: "/", label: "메인", icon: Home },
-  { href: "/walk", label: "산책하기", icon: Footprints },
-  { href: "/records", label: "기록", icon: CalendarDays },
-  { href: "/sharing", label: "셰어링", icon: Users },
-  { href: "/my", label: "마이페이지", icon: UserRound }
+  { href: "/", label: "홈", icon: PawPrint },
+  { href: "/sharing", label: "셰어링", icon: Share2 },
+  { href: "/my", label: "마이페이지", icon: LayoutGrid }
 ] as const;
 
 function TabBar() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-white">
-      <ul className="mx-auto grid w-full max-w-3xl grid-cols-5">
+    <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-20 mx-auto w-full max-w-[375px] bg-ms-page px-6 pb-[18px] pt-[10px]">
+      <ul className="pointer-events-auto flex items-center gap-1 rounded-full border border-ms-line bg-ms-card p-1.5 shadow-sm">
         {TABS.map((tab) => {
           const isActive = tab.href === "/" ? pathname === "/" : pathname.startsWith(tab.href);
           const Icon = tab.icon;
 
           return (
-            <li key={tab.href}>
+            <li className="flex-1 list-none" key={tab.href}>
               <Link
                 aria-current={isActive ? "page" : undefined}
-                className={`grid min-h-[60px] content-center justify-items-center gap-1 py-2 text-xs font-black ${
-                  isActive ? "text-primary" : "text-muted-foreground"
+                className={`flex h-[46px] w-full items-center justify-center gap-[7px] rounded-full text-[13px] font-bold transition ${
+                  isActive ? "bg-ms-sunken text-ms-emphasis" : "text-ms-muted"
                 }`}
                 href={tab.href}
               >
-                <Icon size={20} />
-                <span>{tab.label}</span>
+                <Icon fill={isActive && tab.href === "/" ? "currentColor" : "none"} size={19} strokeWidth={isActive ? 2.3 : 1.9} />
+                {tab.label}
               </Link>
             </li>
           );
@@ -57,7 +57,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (!isRestored) {
     return (
-      <main className="grid min-h-screen place-items-center p-6 text-sm font-bold text-muted-foreground">
+      <main className="grid min-h-screen place-items-center bg-ms-page p-6 text-sm font-bold text-ms-muted">
         불러오는 중이에요...
       </main>
     );
@@ -69,11 +69,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const needsOnboarding = status !== null && status.nextStep !== "complete";
 
+  // 각 화면이 meoksa_FE 디자인 그대로 375px 모바일 프레임을 스스로 그리므로,
+  // 여기서는 패딩 있는 래퍼를 씌우지 않고 콘텐츠를 그대로 내보낸다.
+  // 하단 탭바만 공통으로 얹는다.
   return (
     <>
-      <main className="mx-auto grid w-full max-w-3xl content-start gap-4 p-4 pb-24">
-        {needsOnboarding ? <OnboardingScreen /> : children}
-      </main>
+      {needsOnboarding ? <OnboardingScreen /> : children}
       <TabBar />
     </>
   );

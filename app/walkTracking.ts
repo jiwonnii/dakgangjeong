@@ -175,6 +175,21 @@ export type WalkRecordRecommendedCourse = {
   direction?: string;
   distanceMeters: number;
   durationMinutes: number;
+  score?: number;
+  aiExplanation?: string;
+  explanation?: {
+    summary?: string;
+    factors?: Array<{
+      key: string;
+      label: string;
+      score?: number;
+      weight?: number;
+      contribution?: number;
+      detail?: string;
+      preferenceAdjustment?: number;
+    }>;
+  };
+  facts?: Record<string, unknown>;
   path: WalkRecordRouteGeoJson;
 };
 
@@ -193,6 +208,8 @@ export type WalkRecordResponse = {
   rating: number | null;
   likedNotes: string | null;
   dislikedNotes: string | null;
+  likedFactor: string | null;
+  dislikedFactor: string | null;
   aiSummary: string | null;
   createdAt: string;
 };
@@ -595,7 +612,7 @@ export function useWalkRecordingController({
   }, [saveWalkProgress, tracking.elapsedSeconds, tracking.state.serverRecordId, tracking.state.status]);
 
   const finishWalk = useCallback(
-    async (review: { rating?: number; likedNotes?: string; dislikedNotes?: string; staticMapUrl?: string } = {}) => {
+    async (review: { rating?: number; likedFactor?: string; dislikedFactor?: string; likedNotes?: string; dislikedNotes?: string; staticMapUrl?: string } = {}) => {
       if (!token) {
         throw new Error("Login is required to finish a walk.");
       }
@@ -646,6 +663,8 @@ export function useWalkRecordingController({
       rating?: number;
       likedNotes?: string;
       dislikedNotes?: string;
+      likedFactor?: string;
+      dislikedFactor?: string;
     }) => {
       if (!token) {
         throw new Error("Login is required to create a manual walk.");

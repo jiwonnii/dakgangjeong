@@ -14,6 +14,7 @@ import {
   UserRound,
   Waypoints
 } from "lucide-react";
+import Link from "next/link";
 import { useAuth } from "../auth-context";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "../ui";
 import {
@@ -159,6 +160,9 @@ export default function RecordsTabPage() {
 
   return (
     <div className="grid gap-4">
+      <Link className="flex items-center gap-1 text-sm font-bold text-ms-muted" href="/my">
+        <ChevronLeft size={16} /> 마이페이지로
+      </Link>
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

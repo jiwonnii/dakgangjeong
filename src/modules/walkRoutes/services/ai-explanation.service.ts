@@ -18,10 +18,21 @@ type ExplainableCourse = {
   };
   explanation?: {
     summary?: string;
+    factors?: Array<{
+      key: string;
+      label: string;
+      score?: number;
+      weight?: number;
+      contribution?: number;
+      detail?: string;
+      preferenceAdjustment?: number;
+    }>;
   };
+  preferenceInsight?: string | null;
 };
 
 const explanationCache = new TtlCache<string, string>(60 * 60, 1000);
+let openAiClient: OpenAI | null = null;
 
 function fallbackExplanation(course: ExplainableCourse) {
   const facts = course.facts;
@@ -42,16 +53,28 @@ function cacheKey(course: ExplainableCourse) {
     distanceMeters: course.distanceMeters,
     durationMinutes: course.durationMinutes,
     score: course.score,
-    facts: course.facts
+    facts: course.facts,
+    factors: course.explanation?.factors,
+    preferenceInsight: course.preferenceInsight
   });
 }
 
-async function explainWithOpenAi(course: ExplainableCourse) {
+function getOpenAiClient() {
   if (!env.OPENAI_API_KEY) {
+    return null;
+  }
+
+  openAiClient ??= new OpenAI({ apiKey: env.OPENAI_API_KEY });
+  return openAiClient;
+}
+
+async function explainWithOpenAi(course: ExplainableCourse) {
+  const client = getOpenAiClient();
+
+  if (!client) {
     return fallbackExplanation(course);
   }
 
-  const client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
   const facts = course.facts ?? {};
 
   const response = await client.responses.create({
@@ -60,7 +83,7 @@ async function explainWithOpenAi(course: ExplainableCourse) {
       {
         role: "system",
         content:
-          "You write concise Korean UX copy for a dog walking route app. Do not change ranking, score, or facts. Explain only why this already-ranked course is reasonable."
+          "You write concise Korean UX copy for a dog walking route app. Use only the normalized facts and scoring factors provided. Do not change ranking, score, or facts. Explain why this already-ranked course is reasonable and include one practical caution when useful."
       },
       {
         role: "user",
@@ -76,11 +99,21 @@ async function explainWithOpenAi(course: ExplainableCourse) {
           parkRatio: facts.parkRatio,
           treesPerKm: facts.treesPerKm,
           benchCount: facts.benchCount,
-          existingSummary: course.explanation?.summary
+          existingSummary: course.explanation?.summary,
+          scoringFactors: course.explanation?.factors?.map((factor) => ({
+            key: factor.key,
+            label: factor.label,
+            score: factor.score,
+            weight: factor.weight,
+            contribution: factor.contribution,
+            detail: factor.detail,
+            preferenceAdjustment: factor.preferenceAdjustment
+          })),
+          recentReviewPreference: course.preferenceInsight
         })
       }
     ],
-    max_output_tokens: 120
+    max_output_tokens: 180
   });
 
   return response.output_text.trim() || fallbackExplanation(course);

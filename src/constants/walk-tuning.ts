@@ -205,8 +205,10 @@ export const WAYPOINT_COUNT_MIN = 2;
 export const WAYPOINT_COUNT_MAX = 20;
 export const WAYPOINT_COUNT_DISTANCE_DIVISOR_M = 50000;
 
-/** seed 값 목록 (방위당). 2개 사용 → 3방위 × 2 seed = 후보 6개. */
-export const ROUTE_SEEDS_PER_BEARING: readonly number[] = [1, 2];
+/** seed 값 목록 (방위당). 4개 사용 → 3방위 × 4 seed = 후보 12개.
+ * GraphHopper round_trip 이 서로 다른 heading 에도 같은 루프를 돌려주는
+ * 경우가 있어서, 최종 3순위까지 채울 수 있도록 로컬 후보 풀을 넓힌다. */
+export const ROUTE_SEEDS_PER_BEARING: readonly number[] = [1, 2, 3, 4];
 
 export const DISTANCE_INFLUENCE_DEFAULT = 70;
 

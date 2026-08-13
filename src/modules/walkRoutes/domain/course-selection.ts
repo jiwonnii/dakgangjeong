@@ -20,12 +20,10 @@ import { FINAL_COURSE_COUNT } from "../../../constants/walk-tuning";
  *   `(f) => f.bearing.bin` for CourseFacts, `(s) => s.facts.bearing.bin`
  *   for ScoredCourse.
  * @param getRouteSignature Optional stable identity for the actual path.
- * @returns Up to FINAL_COURSE_COUNT items, one per distinct bearing bin,
- *   in the same best-first relative order as the input. Returns fewer than
- *   FINAL_COURSE_COUNT when fewer distinct bearings are represented — this
- *   is the mechanism spec 5.7 relies on for low-density areas naturally
- *   producing 1~2 courses instead of 3 (no separate "reduce count" logic
- *   needed, consistent with bearing-selection.ts's selectTopBearings).
+ * @returns Up to FINAL_COURSE_COUNT items in the same best-first relative
+ *   order as the input. First prefers one course per distinct bearing bin,
+ *   then backfills with unique routes from already-ranked candidates when
+ *   GraphHopper only produced usable routes in one or two directions.
  */
 export function selectFinalCourses<T>(
   rankedBestFirst: readonly T[],
@@ -54,6 +52,32 @@ export function selectFinalCourses<T>(
 
     selected.push(item);
     usedBearingBins.add(bin);
+
+    if (routeSignature) {
+      usedRouteSignatures.add(routeSignature);
+    }
+  }
+
+  if (selected.length >= FINAL_COURSE_COUNT) {
+    return selected;
+  }
+
+  for (const item of rankedBestFirst) {
+    if (selected.length >= FINAL_COURSE_COUNT) {
+      break;
+    }
+
+    if (selected.includes(item)) {
+      continue;
+    }
+
+    const routeSignature = getRouteSignature?.(item);
+
+    if (routeSignature && usedRouteSignatures.has(routeSignature)) {
+      continue;
+    }
+
+    selected.push(item);
 
     if (routeSignature) {
       usedRouteSignatures.add(routeSignature);
