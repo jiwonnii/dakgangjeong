@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.next/
+.env
+.env.local
+*.log
+dev-server.*.log
+jobs/ingest/data/*.csv
+jobs/ingest/data/*.xlsx
+jobs/ingest/data/*.xls
+jobs/ingest/data/nodelink/
+
+# GraphHopper 로컬 인스턴스 (619MB: OSM PBF + jar). 커밋 금지.
+graphhopper/

@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>먹사 산책 코스 추천 데모</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root {
+    --bg: #f6f5f2;
+    --card: #ffffff;
+    --border: #e3e0d8;
+    --text: #2b2a27;
+    --muted: #8a877e;
+    --accent: #4c8c6a;
+    --accent-dark: #366b4f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+  #sidebar {
+    width: 380px;
+    min-width: 380px;
+    background: var(--card);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  #map { flex: 1; }
+  header {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    font-size: 18px;
+    margin: 0 0 4px;
+  }
+  header p {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0;
+  }
+  .section {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  select, input[type=number] {
+    flex: 1;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fff;
+  }
+  button {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  button:hover { background: var(--accent-dark); }
+  button:disabled { background: #c9c6bb; cursor: default; }
+  #status {
+    padding: 12px 20px;
+    font-size: 13px;
+    color: var(--muted);
+    white-space: pre-wrap;
+  }
+  #status.error { color: #b5482b; }
+  #courses { flex: 1; overflow-y: auto; }
+  .course {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+  .course:hover { background: #faf9f6; }
+  .course.active { background: #eef5f0; border-left: 3px solid var(--accent); }
+  .course .rank {
+    display: inline-block;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+    line-height: 22px;
+    margin-right: 8px;
+  }
+  .course .direction { font-weight: 600; font-size: 14px; }
+  .course .meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .course .scores { display: flex; gap: 10px; margin-top: 8px; font-size: 11px; }
+  .score-chip {
+    background: #f1efe9;
+    border-radius: 4px;
+    padding: 2px 6px;
+    color: var(--text);
+  }
+  .origin-badge {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 8px 20px 0;
+    white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+  <div id="sidebar">
+    <header>
+      <h1>🐾 먹사 산책 코스 추천</h1>
+      <p>실제 백엔드 API를 호출한 결과입니다 (데모용)</p>
+    </header>
+
+    <div class="section">
+      <h2>산책 시간</h2>
+      <div class="row">
+        <select id="durationChoice">
+          <option value="minimum">최소</option>
+          <option value="recommended" selected>추천</option>
+          <option value="custom">직접 설정</option>
+        </select>
+        <input id="customMinutes" type="number" placeholder="분" min="1" max="600" style="display:none; max-width: 80px;" />
+      </div>
+      <button id="locateBtn">📍 현재 위치로 추천받기</button>
+      <p style="font-size:11px; color:var(--muted); margin: 8px 0 0;">
+        위치가 안 맞으면 지도를 클릭해서 직접 출발지를 지정할 수 있어요.
+      </p>
+    </div>
+
+    <div class="origin-badge" id="originBadge"></div>
+    <div id="status"></div>
+    <div id="courses"></div>
+  </div>
+  <div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const SEOUL_FALLBACK = { lat: 37.5665, lon: 126.978 };
+const SERVICE_AREA_CIRCLES = [
+  { lat: 37.5665, lon: 126.978, radiusM: 20000 }, // Seoul
+  { lat: 37.221, lon: 127.1865, radiusM: 3000 }   // Myongji Yongin
+];
+
+const durationSelect = document.getElementById("durationChoice");
+const customMinutesInput = document.getElementById("customMinutes");
+const statusEl = document.getElementById("status");
+const originBadge = document.getElementById("originBadge");
+const coursesEl = document.getElementById("courses");
+const locateBtn = document.getElementById("locateBtn");
+
+durationSelect.addEventListener("change", () => {
+  customMinutesInput.style.display = durationSelect.value === "custom" ? "block" : "none";
+});
+
+const map = L.map("map").setView([SEOUL_FALLBACK.lat, SEOUL_FALLBACK.lon], 14);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "&copy; OpenStreetMap contributors",
+  maxZoom: 19
+}).addTo(map);
+
+let originMarker = null;
+let courseLayers = [];
+let manualOrigin = null;
+const COURSE_COLORS = ["#4c8c6a", "#3a6ea5", "#b5482b"];
+
+map.on("click", (e) => {
+  manualOrigin = { lat: e.latlng.lat, lon: e.latlng.lng };
+  if (originMarker) map.removeLayer(originMarker);
+  originMarker = L.marker([manualOrigin.lat, manualOrigin.lon], {
+    icon: L.divIcon({ className: "", html: "📍", iconSize: [24, 24] })
+  }).addTo(map).bindPopup("직접 지정한 출발 지점").openPopup();
+  originBadge.textContent = `📍 지도에서 직접 지정 (${manualOrigin.lat.toFixed(4)}, ${manualOrigin.lon.toFixed(4)})`;
+  setStatus('"현재 위치로 추천받기"를 누르면 이 지점 기준으로 추천해요.');
+});
+
+function setStatus(text, isError) {
+  statusEl.textContent = text;
+  statusEl.className = isError ? "error" : "";
+}
+
+function haversineMeters(a, b) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const x = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+function isInServiceArea(point) {
+  return SERVICE_AREA_CIRCLES.some((c) => haversineMeters(c, point) <= c.radiusM);
+}
+
+function getCurrentPosition() {
+  return new Promise((resolve) => {
+    if (!window.isSecureContext) {
+      resolve({ error: "브라우저가 이 페이지를 '보안 연결 아님'으로 취급해서 위치 API 자체가 막혀 있어요 (http://localhost 가 아닌 다른 주소로 접속했을 가능성)." });
+      return;
+    }
+    if (!navigator.geolocation) {
+      resolve({ error: "이 브라우저는 위치 API를 지원하지 않아요." });
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      (err) => {
+        const messages = {
+          1: "위치 권한이 거부됐어요 (브라우저 주소창 옆 자물쇠 아이콘 → 위치 → 허용으로 바꿔보세요).",
+          2: "위치를 확인할 수 없어요 (POSITION_UNAVAILABLE).",
+          3: "위치 확인이 시간 초과됐어요."
+        };
+        resolve({ error: messages[err.code] || err.message || "알 수 없는 위치 오류" });
+      },
+      { timeout: 10000, enableHighAccuracy: true }
+    );
+  });
+}
+
+function clearCourses() {
+  courseLayers.forEach((l) => map.removeLayer(l));
+  courseLayers = [];
+  coursesEl.innerHTML = "";
+}
+
+function renderCourses(courses) {
+  clearCourses();
+
+  courses.forEach((course, i) => {
+    const color = COURSE_COLORS[i % COURSE_COLORS.length];
+    const latlngs = course.path.coordinates.map(([lon, lat]) => [lat, lon]);
+    const line = L.polyline(latlngs, { color, weight: 4, opacity: 0.85 }).addTo(map);
+    courseLayers.push(line);
+
+    const div = document.createElement("div");
+    div.className = "course";
+    div.innerHTML = `
+      <div><span class="rank" style="background:${color}">${course.rank}</span>
+        <span class="direction">${course.direction}쪽 코스</span></div>
+      <div class="meta">${course.distanceMeters}m · 약 ${course.durationMinutes}분 · 점수 ${course.score.toFixed(1)}</div>
+      <div class="scores">
+        <span class="score-chip">안전 ${(course.breakdown.safety * 100).toFixed(0)}</span>
+        <span class="score-chip">쾌적 ${(course.breakdown.comfort * 100).toFixed(0)}</span>
+        <span class="score-chip">적합 ${(course.breakdown.fit * 100).toFixed(0)}</span>
+      </div>
+    `;
+    div.addEventListener("click", () => {
+      document.querySelectorAll(".course").forEach((el) => el.classList.remove("active"));
+      div.classList.add("active");
+      map.fitBounds(line.getBounds(), { padding: [40, 40] });
+    });
+    coursesEl.appendChild(div);
+
+    if (i === 0) {
+      div.classList.add("active");
+      map.fitBounds(line.getBounds(), { padding: [40, 40] });
+    }
+  });
+}
+
+async function runRecommendation() {
+  locateBtn.disabled = true;
+  clearCourses();
+
+  let origin;
+  let fallbackReason = null;
+
+  if (manualOrigin) {
+    origin = manualOrigin;
+    if (!isInServiceArea(origin)) {
+      fallbackReason = `지정한 지점(${origin.lat.toFixed(4)}, ${origin.lon.toFixed(4)})이 서비스 지역(서울/용인 명지대 인근) 밖이에요.`;
+      origin = SEOUL_FALLBACK;
+    }
+  } else {
+    setStatus("현재 위치 가져오는 중...");
+    const geo = await getCurrentPosition();
+
+    if (geo && geo.error) {
+      fallbackReason = geo.error;
+      origin = SEOUL_FALLBACK;
+    } else if (geo && !isInServiceArea(geo)) {
+      fallbackReason = `현재 위치(${geo.lat.toFixed(4)}, ${geo.lon.toFixed(4)}, 정확도 ±${Math.round(geo.accuracy)}m)가 서비스 지역(서울/용인 명지대 인근) 밖이에요. 브라우저 위치는 GPS 없는 기기에서 수km~수십km까지 틀릴 수 있어요 — 지도를 클릭해서 직접 지정해보세요.`;
+      origin = SEOUL_FALLBACK;
+    } else {
+      origin = geo;
+      originBadge.textContent = `📍 현재 위치 기준 (${origin.lat.toFixed(4)}, ${origin.lon.toFixed(4)}, 정확도 ±${Math.round(geo.accuracy)}m)`;
+    }
+  }
+
+  if (fallbackReason) {
+    originBadge.textContent = `⚠️ ${fallbackReason}\n서울시청 기준으로 대신 추천합니다 (${origin.lat.toFixed(4)}, ${origin.lon.toFixed(4)})`;
+  } else if (manualOrigin === origin) {
+    originBadge.textContent = `📍 지도에서 직접 지정 (${origin.lat.toFixed(4)}, ${origin.lon.toFixed(4)})`;
+  }
+
+  if (originMarker) map.removeLayer(originMarker);
+  originMarker = L.marker([origin.lat, origin.lon]).addTo(map).bindPopup("출발 지점").openPopup();
+  map.setView([origin.lat, origin.lon], 15);
+
+  try {
+    setStatus("데모 로그인 중...");
+    const sessionRes = await fetch("/api/dev/demo-session");
+    if (!sessionRes.ok) throw new Error("데모 세션 발급 실패 (개발 서버에서만 동작해요)");
+    const { accessToken, dogId } = await sessionRes.json();
+
+    setStatus("산책 코스 계산 중... (10~20초 정도 걸릴 수 있어요)");
+
+    const body = { dogId, origin, durationChoice: durationSelect.value };
+    if (durationSelect.value === "custom") {
+      body.customMinutes = Number(customMinutesInput.value) || 30;
+    }
+
+    const res = await fetch("/api/walk-routes/recommendations", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`
+      },
+      body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error?.message || `요청 실패 (${res.status})`);
+    }
+
+    if (data.status !== "ok") {
+      setStatus(data.message || "코스를 찾지 못했어요.", true);
+      return;
+    }
+
+    setStatus(
+      data.distanceApproximate
+        ? `${data.courses.length}개 코스를 찾았어요. (요청하신 시간과 정확히 맞진 않지만 가장 가까운 코스예요)`
+        : `${data.courses.length}개 코스를 찾았어요.`
+    );
+    renderCourses(data.courses);
+  } catch (err) {
+    console.error(err);
+    setStatus("오류: " + err.message, true);
+  } finally {
+    locateBtn.disabled = false;
+  }
+}
+
+locateBtn.addEventListener("click", runRecommendation);
+</script>
+</body>
+</html>
