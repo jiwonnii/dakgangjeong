@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 144 20% 96%;
+  --foreground: 150 17% 11%;
+  --muted: 138 18% 92%;
+  --muted-foreground: 151 11% 39%;
+  --border: 139 19% 86%;
+  --primary: 151 43% 31%;
+  --primary-foreground: 0 0% 100%;
+  --destructive: 10 64% 43%;
+  --destructive-foreground: 0 0% 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  margin: 0;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.kakao-map-root {
+  width: 100%;
+  height: 340px;
+}

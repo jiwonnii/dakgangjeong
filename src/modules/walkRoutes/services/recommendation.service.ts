@@ -1,0 +1,726 @@
+﻿/**
+ * Orchestrates the full 추천 로직 (spec 5, "전체 흐름"): the single entry
+ * point every round 1-9 module ultimately feeds into.
+ *
+ *   ① 경고 체크         warning-check.ts + weather/air-quality providers
+ *   ② 목표 시간 계산     target-duration.ts
+ *   ③ 방위 선정         bearing-selection.ts + bearing.service.ts
+ *   ④ 코스 생성         route-generation.service.ts
+ *   ⑤ 사후 채점         scoring.service.ts
+ *   ⑥ 성격 가중치       scoring-weighted.ts (breakdown/설명용)
+ *   ⑦ 최종 3개 선정     course-selection.ts, ordered by scoring-weighted.ts totalScore
+ *
+ * Final ordering now uses scoring-weighted.ts's totalScore, so rank, score,
+ * scoreDetails, and explanation all describe the same decision.
+ *
+ * Previously this used scoring-filter.ts's
+ * rankByHierarchicalFilter (안전이 다른 축으로 상쇄될 수 없는 사전식
+ * 정렬), not scoring-weighted.ts's totalScore — round-9 verification found
+ * a concrete case where the spec's own literal 3축 가중치 (40:30:30)
+ * lets a busier, more dangerous road outrank a quieter one because of a
+ * large tree-density gap, which directly contradicts spec 5.6's own
+ * stated principle ("안전은 다른 항목으로 상쇄될 수 없어야 한다"). The
+ * weighted breakdown is still computed and attached to every returned
+ * course, because spec 5.7's response shape and the AI explanation layer
+ * need real safety/comfort/fit numbers — it drives *what is shown*, not
+ * *what wins*. This is a judgment call flagged to the user rather than
+ * decided silently; see the round-9/10 conversation for the alternative
+ * weight tables considered.
+ */
+
+import { getSupabaseAdminClient } from "../../../lib/supabase";
+import { AppError } from "../../../lib/app-error";
+import { gridKeyForPoint, type LatLon } from "../../../lib/geo";
+import { getKstHour } from "../../../lib/kst-time";
+import { resolveTimeOfDayBucket } from "../../../lib/kst-time";
+import { TtlCache } from "../../../lib/ttl-cache";
+import { findDogBreedById } from "../../dogs/dog-breed.service";
+import {
+  BEARING_GRID_CELL_SIZE_M,
+  EVENING_OR_NIGHT_END_HOUR,
+  EVENING_OR_NIGHT_START_HOUR,
+  MORNING_END_HOUR,
+  RECOMMENDATION_CACHE_TTL_SECONDS
+} from "../../../constants/walk-tuning";
+import { normalizeDogProfile, type DogProfile } from "../domain/dog-profile";
+import { calculateTargetDuration, type DurationOptions } from "../domain/target-duration";
+import { evaluateWarnings, type WarningEvaluation, type WeatherSnapshot } from "../domain/warning-check";
+import { getWeatherSnapshot } from "../providers/weather.provider";
+import { getAirQualitySnapshot } from "../providers/air-quality.provider";
+import { verifyPedestrianRoute } from "../providers/tmap.provider";
+import { getRoadCountsByBearing } from "./bearing.service";
+import { isCoverageSufficient, selectTopBearings } from "../domain/bearing-selection";
+import { generateRouteCandidates, type RouteGenerationFailure } from "./route-generation.service";
+import { fetchOriginContext, scoreRouteCandidates, type CourseFacts, type OriginContext } from "./scoring.service";
+import { applyHardFilters } from "../domain/scoring-filter";
+import { rankByWeightedScore, type ScoreBreakdown } from "../domain/scoring-weighted";
+import { selectFinalCourses } from "../domain/course-selection";
+import type { DogPersonalityTag, DogSocialPreference, DurationChoice } from "../../../types/domain";
+
+export type RecommendationRequest = {
+  dogId: string;
+  origin: LatLon;
+  durationChoice: DurationChoice;
+  /** Required and validated against [minimumMinutes, maximumMinutes] when
+   * durationChoice is "custom" (spec 5.2 "직접 설정 = 최소~상한 사이 자유"). */
+  customMinutes?: number;
+  /**
+   * "다시 추천받기" 용. 캐시 읽기를 건너뛰고 코스 생성 시드를 새로 뽑는다.
+   *
+   * 이게 없으면 같은 출발지·같은 시간대에서는 캐시 TTL(6시간) 내내 똑같은
+   * 코스 3개가 돌아와서 버튼이 아무 일도 안 하는 것처럼 보인다. 결과는
+   * 캐시에 다시 써서, 이어지는 일반 요청은 새로 뽑은 코스를 받는다.
+   */
+  refresh?: boolean;
+};
+
+export type RecommendedCourseFacts = {
+  vehicleExposure: number | null;
+  parkRatio: number;
+  treesPerKm: number;
+  riskZoneCount: number;
+  benchCount: number;
+  dogEncounterProbability: number;
+  /** Null until the round-12 TMAP background verification pass (see
+   * `enrichCoursesWithTmapInBackground` below) fills it in — deliberately
+   * absent from the synchronous response (spec 7.3: TMAP은 파이프라인에
+   * 포함하지 않음). A client that wants the confirmed count can re-request
+   * the same recommendation shortly after; it will come back from cache
+   * with this field populated once enrichment finishes. */
+  crosswalkCount: number | null;
+  /** Starts as the PostGIS road_segments-based estimate (round 8/9);
+   * overwritten with TMAP's real facility count once verification
+   * finishes, since TMAP's routing-engine data is the more authoritative
+   * source when available. */
+  stepsCount: number;
+  /** ISO timestamp of when TMAP verification completed for this course,
+   * or null if it hasn't (yet, or the background pass failed for this
+   * course specifically — see enrichCoursesWithTmapInBackground's
+   * per-course error isolation). */
+  tmapVerifiedAt: string | null;
+};
+
+export type RecommendedCourseScoreDetails = {
+  riskZones: number;
+  vehicleExposure: number;
+  pedestrianSafety: number;
+  environment: number;
+  familiarity: number;
+  fit: number;
+};
+
+export type RecommendedCourseExplanation = {
+  summary: string;
+  factors: Array<{
+    key: keyof RecommendedCourseScoreDetails;
+    label: string;
+    score: number;
+    weight: number;
+    contribution: number;
+    detail: string;
+  }>;
+};
+
+export type RecommendedCourse = {
+  rank: number;
+  direction: string;
+  distanceMeters: number;
+  durationMinutes: number;
+  score: number;
+  breakdown: Pick<ScoreBreakdown, "safety" | "comfort" | "fit">;
+  scoreDetails: RecommendedCourseScoreDetails;
+  explanation: RecommendedCourseExplanation;
+  facts: RecommendedCourseFacts;
+  path: { type: "LineString"; coordinates: [number, number][] };
+};
+
+export type RecommendationResult =
+  | { status: "insufficient_coverage"; message: string }
+  | { status: "generation_failed"; message: string; failures: RouteGenerationFailure[] }
+  | { status: "no_courses_found"; message: string }
+  | {
+      status: "ok";
+      courses: RecommendedCourse[];
+      warnings: WarningEvaluation["warnings"];
+      durationOptions: DurationOptions;
+      /** True when every candidate missed the target-distance tolerance and
+       * this response is the closest-available fallback instead of a
+       * tolerance-passing match (see applyHardFilters's
+       * enforceDistanceTolerance param) — the client should say something
+       * like "요청하신 시간과 정확히 맞진 않지만" rather than presenting
+       * these as an exact match. */
+      distanceApproximate?: boolean;
+    };
+
+const recommendationCache = new TtlCache<string, RecommendationResult>(
+  RECOMMENDATION_CACHE_TTL_SECONDS
+);
+
+const RECOMMENDATION_CACHE_VERSION = "route-score-v3";
+const ROUTE_SIGNATURE_PRECISION = 10000;
+const ROUTE_SIGNATURE_SAMPLE_COUNT = 24;
+
+type DogRow = {
+  id: string;
+  breed: string;
+  weight_kg: number;
+  birth_date: string;
+  social_preference: DogSocialPreference;
+  personality_tags: DogPersonalityTag[] | null;
+  health_notes: string | null;
+};
+
+/** Exported for the lightweight GET /duration-options and GET /warnings
+ * controllers, which need a DogProfile but should not run the rest of the
+ * pipeline (spec 7.3 최적화 1). */
+export async function loadDogProfile(dogId: string, now: Date): Promise<DogProfile> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from("dogs")
+    .select("id, breed, weight_kg, birth_date, social_preference, personality_tags, health_notes")
+    .eq("id", dogId)
+    .maybeSingle();
+
+  if (error) {
+    throw new AppError(error.message, 500, "DOG_LOOKUP_FAILED");
+  }
+
+  if (!data) {
+    throw new AppError("Dog not found.", 404, "DOG_NOT_FOUND");
+  }
+
+  const dog = data as DogRow;
+  const breedInfo = await findDogBreedById(dog.breed);
+
+  return normalizeDogProfile(
+    {
+      dogId: dog.id,
+      breedId: dog.breed,
+      akcGroupName: breedInfo?.groupName ?? null,
+      weightKg: dog.weight_kg,
+      birthDateIso: dog.birth_date,
+      socialPreference: dog.social_preference,
+      personalityTags: dog.personality_tags ?? [],
+      healthNotes: dog.health_notes
+    },
+    now
+  );
+}
+
+/**
+ * ① + ②: fetches weather/air-quality in parallel, evaluates warnings, and
+ * derives this dog's target duration. Exposed separately (not just inline
+ * in recommendWalkRoutes) so GET /duration-options and GET /warnings can
+ * reuse it without running the rest of the pipeline (spec 7.3 최적화 1:
+ * "앱 진입 즉시 GPS 및 날씨를 백그라운드로 선요청").
+ */
+export async function evaluateWarningsAndDuration(
+  profile: DogProfile,
+  origin: LatLon,
+  now: Date
+): Promise<{ warningEvaluation: WarningEvaluation; durationOptions: DurationOptions }> {
+  const [weatherSnapshot, airQualitySnapshot] = await Promise.all([
+    getWeatherSnapshot(origin.lat, origin.lon),
+    getAirQualitySnapshot(origin.lat, origin.lon)
+  ]);
+
+  const mergedWeather: WeatherSnapshot = {
+    ...weatherSnapshot,
+    pm10: airQualitySnapshot.pm10,
+    pm25: airQualitySnapshot.pm25
+  };
+
+  const warningEvaluation = evaluateWarnings(profile, mergedWeather, now);
+  const durationOptions = calculateTargetDuration(profile, warningEvaluation.durationPenaltyRatio);
+
+  return { warningEvaluation, durationOptions };
+}
+
+function resolveTargetMinutes(durationOptions: DurationOptions, request: RecommendationRequest): number {
+  if (request.durationChoice === "minimum") {
+    return durationOptions.minimumMinutes;
+  }
+
+  if (request.durationChoice === "recommended") {
+    return durationOptions.recommendedMinutes;
+  }
+
+  if (request.customMinutes === undefined) {
+    throw new AppError(
+      "customMinutes is required when durationChoice is 'custom'.",
+      400,
+      "CUSTOM_MINUTES_REQUIRED"
+    );
+  }
+
+  if (
+    request.customMinutes < durationOptions.minimumMinutes ||
+    request.customMinutes > durationOptions.maximumMinutes
+  ) {
+    throw new AppError(
+      `customMinutes must be between ${durationOptions.minimumMinutes} and ${durationOptions.maximumMinutes}.`,
+      400,
+      "CUSTOM_MINUTES_OUT_OF_RANGE"
+    );
+  }
+
+  return request.customMinutes;
+}
+
+/**
+ * Built from the request alone — no DB/API calls — so the cache can be
+ * checked before loading the dog profile or weather, not after. Using the
+ * *chosen* duration (durationChoice + customMinutes) rather than the fully
+ * resolved target-minutes value is what makes that possible: resolving
+ * actual minutes requires the profile and the current warning penalty
+ * ratio, which would defeat the purpose of checking the cache first. Two
+ * requests with the same choice map to the same resolved minutes anyway as
+ * long as weather hasn't changed enough to flip the warning level within
+ * the cache TTL, which is the same granularity spec 7.3's "시간대" bucket
+ * already assumes.
+ */
+function buildCacheKey(
+  origin: LatLon,
+  dogId: string,
+  durationChoice: DurationChoice,
+  customMinutes: number | undefined,
+  now: Date
+): string {
+  const gridKey = gridKeyForPoint(origin, BEARING_GRID_CELL_SIZE_M);
+  const timeOfDay = resolveTimeOfDayBucket(
+    getKstHour(now),
+    MORNING_END_HOUR,
+    EVENING_OR_NIGHT_START_HOUR,
+    EVENING_OR_NIGHT_END_HOUR
+  );
+  const durationKey = durationChoice === "custom" ? `custom:${customMinutes}` : durationChoice;
+
+  return `${RECOMMENDATION_CACHE_VERSION}:${gridKey}:${dogId}:${durationKey}:${timeOfDay}`;
+}
+
+type WalkCourseCacheRow = {
+  cache_key: string;
+  payload: RecommendationResult;
+  expires_at: string;
+};
+
+async function readPersistentCache(cacheKey: string): Promise<RecommendationResult | null> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from("walk_course_cache")
+    .select("cache_key, payload, expires_at")
+    .eq("cache_key", cacheKey)
+    .maybeSingle();
+
+  if (error) {
+    // A persistent-cache read failure should never fail the whole request —
+    // fall through to recomputing, matching this table's "선택" (optional)
+    // status in spec 6.
+    return null;
+  }
+
+  const row = data as WalkCourseCacheRow | null;
+
+  if (!row || new Date(row.expires_at).getTime() <= Date.now()) {
+    return null;
+  }
+
+  return row.payload;
+}
+
+async function writePersistentCache(
+  cacheKey: string,
+  result: RecommendationResult,
+  now: Date
+): Promise<void> {
+  const supabase = getSupabaseAdminClient();
+  const expiresAt = new Date(now.getTime() + RECOMMENDATION_CACHE_TTL_SECONDS * 1000).toISOString();
+
+  // Best-effort: a write failure here must not fail the request that
+  // already has a perfectly good result to return.
+  await supabase
+    .from("walk_course_cache")
+    .upsert({ cache_key: cacheKey, payload: result, expires_at: expiresAt })
+    .then(
+      () => undefined,
+      () => undefined
+    );
+}
+
+/**
+ * Round-12 "비동기 검증": called WITHOUT `await` right before
+ * `recommendWalkRoutes` returns its "ok" result, so it runs after the HTTP
+ * response has already gone out (spec 7.3: TMAP은 파이프라인에 포함하지
+ * 않음— this function is the "않음" part made concrete). Verifies each of
+ * the final courses against TMAP in parallel, and — only for the courses
+ * that succeed — writes an updated result back to both cache layers under
+ * the same key, so a client that re-requests the same recommendation
+ * shortly after gets the enriched crosswalk/steps counts from cache
+ * without the original request ever having waited on TMAP.
+ *
+ * Every failure mode here is swallowed (logged, not thrown/rejected) —
+ * this function's caller does not and must not await it, so an unhandled
+ * rejection here would become an unhandled rejection at the process
+ * level, not something any request's error handling could catch.
+ */
+function enrichCoursesWithTmapInBackground(
+  cacheKey: string,
+  result: Extract<RecommendationResult, { status: "ok" }>,
+  now: Date
+): void {
+  void (async () => {
+    const verifiedAt = new Date().toISOString();
+
+    const enrichedCourses = await Promise.all(
+      result.courses.map(async (course) => {
+        try {
+          const points = course.path.coordinates.map(([lon, lat]) => ({ lat, lon }));
+          const facilityCounts = await verifyPedestrianRoute(points);
+
+          return {
+            ...course,
+            facts: {
+              ...course.facts,
+              crosswalkCount: facilityCounts.crosswalkCount,
+              stepsCount: facilityCounts.stepsCount,
+              tmapVerifiedAt: verifiedAt
+            }
+          };
+        } catch (error) {
+          console.error(
+            `[recommendation.service] TMAP verification failed for course rank ${course.rank}:`,
+            error instanceof Error ? error.message : error
+          );
+          return course; // leave this one course's facts as they were
+        }
+      })
+    );
+
+    const enrichedResult: RecommendationResult = { ...result, courses: enrichedCourses };
+
+    recommendationCache.set(cacheKey, enrichedResult);
+    await writePersistentCache(cacheKey, enrichedResult, now).catch((error) => {
+      console.error("[recommendation.service] Failed to persist TMAP-enriched result:", error);
+    });
+  })().catch((error) => {
+    console.error("[recommendation.service] TMAP background enrichment pass failed:", error);
+  });
+}
+
+function roundScore(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function routePointSignature(point: LatLon): string {
+  return `${Math.round(point.lat * ROUTE_SIGNATURE_PRECISION)},${Math.round(
+    point.lon * ROUTE_SIGNATURE_PRECISION
+  )}`;
+}
+
+function buildRouteSignature(points: readonly LatLon[]): string {
+  if (points.length === 0) {
+    return "";
+  }
+
+  const stride = Math.max(1, Math.floor(points.length / ROUTE_SIGNATURE_SAMPLE_COUNT));
+  const sampled: string[] = [];
+
+  for (let index = 0; index < points.length; index += stride) {
+    sampled.push(routePointSignature(points[index]));
+  }
+
+  const lastSignature = routePointSignature(points[points.length - 1]);
+
+  if (sampled[sampled.length - 1] !== lastSignature) {
+    sampled.push(lastSignature);
+  }
+
+  const forward = sampled.join("|");
+  const reverse = [...sampled].reverse().join("|");
+
+  return forward < reverse ? forward : reverse;
+}
+
+function buildCourseExplanation(
+  facts: CourseFacts,
+  breakdown: ScoreBreakdown,
+  profile: DogProfile,
+  targetMeters: number
+): RecommendedCourseExplanation {
+  const factors: RecommendedCourseExplanation["factors"] = [
+    {
+      key: "riskZones",
+      label: "사고다발/위험구간",
+      score: roundScore(breakdown.components.riskZones),
+      weight: breakdown.weights.riskZones,
+      contribution: roundScore(breakdown.components.riskZones * breakdown.weights.riskZones),
+      detail:
+        facts.riskZoneCount === 0
+          ? "사고다발/위험구간을 지나지 않아 가장 크게 가점됐어요."
+          : `사고다발/위험구간 ${facts.riskZoneCount}곳을 지나 감점됐어요.`
+    },
+    {
+      key: "vehicleExposure",
+      label: "차량 노출도",
+      score: roundScore(breakdown.components.vehicleExposure),
+      weight: breakdown.weights.vehicleExposure,
+      contribution: roundScore(
+        breakdown.components.vehicleExposure * breakdown.weights.vehicleExposure
+      ),
+      detail:
+        facts.vehicleExposureAvg === null
+          ? "도로 매칭 데이터가 없어 보수적으로 가장 위험한 차량 노출도로 계산했어요."
+          : `차량 노출도 평균 ${roundScore(facts.vehicleExposureAvg)}/5 기준으로 계산했어요.`
+    },
+    {
+      key: "pedestrianSafety",
+      label: "보행 위험",
+      score: roundScore(breakdown.components.pedestrianSafety),
+      weight: breakdown.weights.pedestrianSafety,
+      contribution: roundScore(
+        breakdown.components.pedestrianSafety * breakdown.weights.pedestrianSafety
+      ),
+      detail: profile.needsStairFilter
+        ? `계단 ${facts.stepsCount}개 기준으로 계산했어요. 이 강아지는 계단 회피 대상이에요.`
+        : "현재 동기 계산에서는 일반 강아지의 계단 개수를 감점하지 않아요."
+    },
+    {
+      key: "environment",
+      label: "가로수/공원/벤치",
+      score: roundScore(breakdown.components.environment),
+      weight: breakdown.weights.environment,
+      contribution: roundScore(breakdown.components.environment * breakdown.weights.environment),
+      detail:
+        profile.lifeStage === "senior" || profile.lifeStage === "geriatric"
+          ? `가로수 ${roundScore(facts.treesPerKm)}/km, 공원 ${formatPercent(
+              facts.parkRatio
+            )}, 벤치 ${facts.benchCount}개를 반영했어요.`
+          : `가로수 ${roundScore(facts.treesPerKm)}/km, 공원 ${formatPercent(
+              facts.parkRatio
+            )}를 반영했어요. 벤치는 노령견 점수에서만 직접 반영돼요.`
+    },
+    {
+      key: "familiarity",
+      label: "익숙함/새로움",
+      score: roundScore(breakdown.components.familiarity),
+      weight: breakdown.weights.familiarity,
+      contribution: roundScore(breakdown.components.familiarity * breakdown.weights.familiarity),
+      detail: profile.personality.isAdventurous
+        ? `탐험 성향이라 최근 경로와 덜 겹칠수록 좋아요. 현재 겹침은 ${formatPercent(
+            facts.diversityOverlapRatio
+          )}예요.`
+        : `익숙한 길을 선호하는 기준이라 최근 경로와 더 겹칠수록 좋아요. 현재 겹침은 ${formatPercent(
+            facts.diversityOverlapRatio
+          )}예요.`
+    },
+    {
+      key: "fit",
+      label: "요청 시간/거리 적합도",
+      score: roundScore(breakdown.components.fit),
+      weight: breakdown.weights.fit,
+      contribution: roundScore(breakdown.components.fit * breakdown.weights.fit),
+      detail: `목표 거리 ${Math.round(targetMeters)}m 대비 실제 거리 ${Math.round(
+        facts.distanceMeters
+      )}m 기준으로 계산했어요.`
+    }
+  ];
+
+  return {
+    summary: "총점은 사고위험, 차량노출, 보행위험, 환경/성격, 거리 적합도를 가중 합산해 계산해요.",
+    factors
+  };
+}
+
+function toRecommendedCourse(
+  rank: number,
+  facts: CourseFacts,
+  breakdown: ScoreBreakdown,
+  profile: DogProfile,
+  targetMeters: number
+): RecommendedCourse {
+  return {
+    rank,
+    direction: facts.bearing.labelKo,
+    distanceMeters: Math.round(facts.distanceMeters),
+    durationMinutes: Math.round(facts.timeMs / 60000),
+    score: roundScore(breakdown.totalScore),
+    breakdown: { safety: breakdown.safety, comfort: breakdown.comfort, fit: breakdown.fit },
+    scoreDetails: {
+      riskZones: roundScore(breakdown.components.riskZones),
+      vehicleExposure: roundScore(breakdown.components.vehicleExposure),
+      pedestrianSafety: roundScore(breakdown.components.pedestrianSafety),
+      environment: roundScore(breakdown.components.environment),
+      familiarity: roundScore(breakdown.components.familiarity),
+      fit: roundScore(breakdown.components.fit)
+    },
+    explanation: buildCourseExplanation(facts, breakdown, profile, targetMeters),
+    facts: {
+      vehicleExposure: facts.vehicleExposureAvg,
+      parkRatio: facts.parkRatio,
+      treesPerKm: facts.treesPerKm,
+      riskZoneCount: facts.riskZoneCount,
+      benchCount: facts.benchCount,
+      dogEncounterProbability: breakdown.dogEncounterProbability,
+      crosswalkCount: null,
+      stepsCount: facts.stepsCount,
+      tmapVerifiedAt: null
+    },
+    path: {
+      type: "LineString",
+      coordinates: facts.points.map((point) => [point.lon, point.lat])
+    }
+  };
+}
+
+/**
+ * The full pipeline. Returns a discriminated-union result rather than
+ * throwing for the "not really an error, just nothing to recommend"
+ * outcomes (insufficient coverage, every candidate failed generation, or
+ * every generated candidate was filtered out) — those are expected,
+ * user-facing states, not exceptional ones.
+ */
+export async function recommendWalkRoutes(
+  request: RecommendationRequest,
+  now: Date = new Date()
+): Promise<RecommendationResult> {
+  const profile = await loadDogProfile(request.dogId, now);
+  // 모험적인 성격은 매번 새 코스를 뽑는 게 의도라 애초에 캐시를 쓰지 않는다.
+  const shouldUseRecommendationCache = !profile.personality.isAdventurous;
+  // "다시 추천받기"(refresh)는 읽기만 건너뛴다. 쓰기는 그대로 해서 이어지는
+  // 일반 요청이 새로 뽑은 코스를 받게 한다.
+  const shouldReadCache = shouldUseRecommendationCache && !request.refresh;
+
+  // Built from the request alone, so both cache layers can be checked
+  // before any DB/API call — see buildCacheKey's doc comment for why this
+  // has to use the request's chosen duration rather than fully-resolved
+  // target minutes.
+  const cacheKey = buildCacheKey(
+    request.origin,
+    request.dogId,
+    request.durationChoice,
+    request.customMinutes,
+    now
+  );
+
+  if (shouldReadCache) {
+    const cachedInMemory = recommendationCache.get(cacheKey);
+    if (cachedInMemory) {
+      return cachedInMemory;
+    }
+
+    const cachedPersisted = await readPersistentCache(cacheKey);
+    if (cachedPersisted) {
+      recommendationCache.set(cacheKey, cachedPersisted);
+      return cachedPersisted;
+    }
+  }
+
+  const { warningEvaluation, durationOptions } = await evaluateWarningsAndDuration(
+    profile,
+    request.origin,
+    now
+  );
+
+  const targetMinutes = resolveTargetMinutes(durationOptions, request);
+  const targetMeters = Math.round(targetMinutes * (profile.walkingSpeedKmh / 60) * 1000);
+
+  const roadCounts = await getRoadCountsByBearing(request.origin);
+
+  if (!isCoverageSufficient(roadCounts)) {
+    const result: RecommendationResult = {
+      status: "insufficient_coverage",
+      message: "이 지역은 산책로 데이터가 부족해서 코스를 만들 수 없어요."
+    };
+    // Coverage results are still cached — recomputing the same "no data
+    // here" answer on every request in a genuinely uncovered area wastes
+    // the weather/air-quality calls that already ran above for nothing.
+    if (shouldUseRecommendationCache) {
+      recommendationCache.set(cacheKey, result);
+      await writePersistentCache(cacheKey, result, now);
+    }
+    return result;
+  }
+
+  const bearings = selectTopBearings(roadCounts);
+
+  const [{ candidates, failures }, originContext] = await Promise.all([
+    generateRouteCandidates(request.origin, targetMeters, bearings, profile, now, {
+      // 캐시를 건너뛰어도 시드가 같으면 GraphHopper 가 같은 코스를 준다.
+      randomizeSeeds: Boolean(request.refresh)
+    }),
+    fetchOriginContext(request.origin)
+  ]);
+
+  if (candidates.length === 0) {
+    return {
+      status: "generation_failed",
+      message: "코스를 생성하지 못했어요. 잠시 후 다시 시도해 주세요.",
+      failures
+    };
+  }
+
+  const facts = await scoreRouteCandidates(candidates, request.dogId);
+  let hardFiltered = applyHardFilters(facts, targetMeters, profile);
+  let distanceApproximate = false;
+
+  if (hardFiltered.length === 0) {
+    // Every candidate missed the distance tolerance — GraphHopper's
+    // round_trip doesn't hit target distances precisely (confirmed
+    // 2026-08-10), so this is common, not exceptional. Retry with the
+    // distance gate off (stairs safety gate stays on) rather than telling
+    // the user nothing was found when real candidates exist.
+    hardFiltered = applyHardFilters(facts, targetMeters, profile, false);
+    distanceApproximate = hardFiltered.length > 0;
+  }
+
+  if (hardFiltered.length === 0) {
+    const result: RecommendationResult = {
+      status: "no_courses_found",
+      message: "조건에 맞는 코스를 찾지 못했어요. 목표 거리를 조정해 보세요."
+    };
+    return result;
+  }
+
+  const orderedWithBreakdown = rankByWeightedScore(
+    hardFiltered,
+    targetMeters,
+    profile,
+    originContext
+  );
+
+  const finalSelection = selectFinalCourses(
+    orderedWithBreakdown,
+    (item) => item.facts.bearing.bin,
+    (item) => buildRouteSignature(item.facts.points)
+  );
+
+  const result: RecommendationResult = {
+    status: "ok",
+    courses: finalSelection.map((item, index) =>
+      toRecommendedCourse(index + 1, item.facts, item.breakdown, profile, targetMeters)
+    ),
+    warnings: warningEvaluation.warnings,
+    durationOptions,
+    ...(distanceApproximate ? { distanceApproximate: true } : {})
+  };
+
+  if (shouldUseRecommendationCache) {
+    recommendationCache.set(cacheKey, result);
+    await writePersistentCache(cacheKey, result, now);
+  }
+
+  // Fire-and-forget: deliberately not awaited, so this request returns
+  // immediately with `result` and TMAP verification happens after the
+  // response has already gone out (spec 7.3).
+  if (shouldUseRecommendationCache) {
+    enrichCoursesWithTmapInBackground(cacheKey, result, now);
+  }
+
+  return result;
+}
