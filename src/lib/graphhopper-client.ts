@@ -117,17 +117,6 @@ function buildRouteUrl(): string {
   return url.toString();
 }
 
-function buildRouteUrl(): string {
-  const baseUrl = env.GRAPHHOPPER_URL.replace(/\/$/, "");
-  const url = new URL(`${baseUrl}/route`);
-
-  if (env.GRAPHHOPPER_API_KEY) {
-    url.searchParams.set("key", env.GRAPHHOPPER_API_KEY);
-  }
-
-  return url.toString();
-}
-
 /**
  * Requests a single round-trip route. Throws AppError on any GraphHopper
  * error (non-2xx status, or a 2xx response with no usable path — e.g. the
