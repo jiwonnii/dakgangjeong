@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Dog } from "lucide-react";
+import { Bell, ChevronDown, Dog, Info, ListChecks, MapPin, Megaphone, UserRound, Users } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -16,7 +16,6 @@ import {
   type RoutineDraft,
   type SharingCareKind
 } from "./sharing/care-utils";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "./ui";
 
 const guardianSchema = z.object({
   displayName: z.string().trim().min(1, "보호자 이름을 입력해 주세요."),
@@ -39,9 +38,9 @@ type OnboardingFlowStep = "invite" | "dog" | "care";
 const CARE_COUNT_OPTIONS = [0, 1, 2, 3];
 const UNCHECKED = false;
 const CONSENT_FIELDS = [
-  { name: "locationPermissionAgreed", label: "위치 권한에 동의해요", required: true },
-  { name: "notificationPermissionAgreed", label: "알림 권한에 동의해요", required: true },
-  { name: "marketingAgreed", label: "마케팅 수신에 동의해요", required: false }
+  { name: "locationPermissionAgreed", label: "위치 권한에 동의해요", required: true, icon: MapPin },
+  { name: "notificationPermissionAgreed", label: "알림 권한에 동의해요", required: true, icon: Bell },
+  { name: "marketingAgreed", label: "마케팅 수신에 동의해요", required: false, icon: Megaphone }
 ] as const;
 
 /**
@@ -234,79 +233,236 @@ export function OnboardingScreen() {
   }
 
   return (
-    <div className="grid content-start gap-4">
-      <div className="rounded-lg border border-border bg-muted p-4 text-sm font-bold">
-        강아지를 먼저 등록해주세요. 등록하면 산책 추천과 기록을 쓸 수 있어요.
-      </div>
+    <main className="flex min-h-screen w-full justify-center bg-ms-page text-ms-ink">
+      <div className="relative min-h-screen w-full max-w-[375px] bg-ms-page px-6 pb-24 pt-5">
+        <header className="flex h-12 items-center gap-3">
+          <img alt="산책가개" className="h-10 w-10 rounded-[12px] object-cover shadow-sm" src="/logo.png" />
+          <div>
+            <p className="text-[12px] font-semibold leading-none text-ms-muted">시작하기 전에</p>
+            <h1 className="mt-1 text-[18px] font-extrabold leading-none text-ms-ink">프로필 설정</h1>
+          </div>
+        </header>
 
-      {status?.nextStep === "guardian-profile" && (
-        <Card>
-          <CardHeader><CardTitle>보호자 프로필</CardTitle></CardHeader>
-          <CardContent>
-            <form className="grid gap-3" onSubmit={guardianForm.handleSubmit(submitGuardian)}>
-              <Input placeholder="보호자 이름" {...guardianForm.register("displayName")} />
-              {CONSENT_FIELDS.map((field) => (
-                <label className="flex items-start gap-2 rounded-md border border-border bg-muted p-3 text-sm font-bold" key={field.name}>
-                  <input className="mt-1" type="checkbox" {...guardianForm.register(field.name)} />
-                  <span>{field.label} {field.required ? <b className="text-destructive">(필수)</b> : "(선택)"}</span>
-                </label>
-              ))}
+        <div className="mt-5 rounded-[18px] bg-ms-sunken px-4 py-3.5 text-[13px] font-bold leading-[1.5] text-ms-emphasis">
+          강아지를 먼저 등록해주세요. 등록하면 산책 추천과 기록을 쓸 수 있어요.
+        </div>
+
+        {status?.nextStep === "guardian-profile" && (
+          <section className="mt-8">
+            <p className="text-[15px] font-bold leading-none text-ms-emphasis">보호자 정보</p>
+            <h2 className="mt-3 text-[26px] font-extrabold leading-[1.22] text-ms-ink">
+              보호자 프로필을
+              <br />
+              등록해주세요.
+            </h2>
+            <p className="mt-3 text-[15px] font-medium leading-[1.55] text-ms-secondary">
+              산책 기록과 셰어링 체크리스트에 표시될 기본 정보만 받아요.
+            </p>
+
+            <form className="mt-7 space-y-4" onSubmit={guardianForm.handleSubmit(submitGuardian)}>
+              <label className="block">
+                <span className="text-[14px] font-bold leading-none text-ms-secondary">이름</span>
+                <span className="mt-2 flex h-14 items-center gap-3 rounded-[18px] border border-ms-line bg-ms-card px-4 focus-within:border-ms-line-strong focus-within:ring-4 focus-within:ring-[rgba(250,125,56,0.14)]">
+                  <UserRound className="shrink-0 text-ms-muted" size={19} strokeWidth={2.1} />
+                  <input
+                    className="h-full min-w-0 flex-1 bg-transparent text-[17px] font-extrabold text-ms-ink outline-none placeholder:text-ms-muted"
+                    placeholder="보호자 이름"
+                    {...guardianForm.register("displayName")}
+                  />
+                </span>
+              </label>
+
+              <div className="space-y-2.5">
+                {CONSENT_FIELDS.map((field) => {
+                  const Icon = field.icon;
+                  return (
+                    <label
+                      className="flex items-start gap-3 rounded-[18px] border border-ms-line bg-ms-card px-4 py-3.5"
+                      key={field.name}
+                    >
+                      <Icon className="mt-0.5 shrink-0 text-ms-muted" size={18} strokeWidth={2.1} />
+                      <span className="flex-1 text-[14px] font-bold leading-[1.45] text-ms-ink">
+                        {field.label}{" "}
+                        <span className={field.required ? "font-extrabold text-ms-warn-fg" : "font-medium text-ms-muted"}>
+                          {field.required ? "(필수)" : "(선택)"}
+                        </span>
+                      </span>
+                      <input
+                        className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--brand)]"
+                        type="checkbox"
+                        {...guardianForm.register(field.name)}
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+
               {guardianErrorMessage && (
-                <div className="rounded-md border border-destructive/30 bg-red-50 p-3 text-sm font-bold text-destructive">
+                <p className="rounded-[16px] bg-ms-warn-bg px-4 py-3 text-[13px] font-bold text-ms-warn-fg">
                   {guardianErrorMessage}
-                </div>
+                </p>
               )}
-              <Button disabled={isBusy} type="submit">저장</Button>
-            </form>
-          </CardContent>
-        </Card>
-      )}
 
-      {status?.nextStep === "dog-or-invite" && flowStep === "invite" && (
-        <Card>
-          <CardHeader><CardTitle>초대 코드 입력</CardTitle></CardHeader>
-          <CardContent>
-            <form className="grid gap-3" onSubmit={submitInvite}>
-              <Input
-                placeholder="가족에게 받은 초대 코드"
-                value={inviteCode}
-                onChange={(event) => setInviteCode(event.target.value)}
-              />
-              <p className="text-sm font-bold text-muted-foreground">초대 코드가 있으면 가족의 강아지에 바로 합류하고, 없으면 새 강아지를 등록해요.</p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Button disabled={isBusy} type="submit">
+              <button
+                className="flex h-14 w-full items-center justify-center rounded-full bg-ms-brand text-[17px] font-extrabold text-ms-on-brand transition active:scale-[0.99] active:bg-ms-brand-pressed disabled:opacity-60"
+                disabled={isBusy}
+                type="submit"
+              >
+                저장
+              </button>
+            </form>
+          </section>
+        )}
+
+        {status?.nextStep === "dog-or-invite" && flowStep === "invite" && (
+          <section className="mt-8">
+            <p className="text-[15px] font-bold leading-none text-ms-emphasis">가족과 함께</p>
+            <h2 className="mt-3 text-[26px] font-extrabold leading-[1.22] text-ms-ink">
+              초대 코드가
+              <br />
+              있나요?
+            </h2>
+            <p className="mt-3 text-[15px] font-medium leading-[1.55] text-ms-secondary">
+              초대 코드가 있으면 가족의 강아지에 바로 합류하고, 없으면 새 강아지를 등록해요.
+            </p>
+
+            <form className="mt-7 space-y-4" onSubmit={submitInvite}>
+              <label className="block">
+                <span className="text-[14px] font-bold leading-none text-ms-secondary">초대 코드</span>
+                <span className="mt-2 flex h-14 items-center gap-3 rounded-[18px] border border-ms-line bg-ms-card px-4 focus-within:border-ms-line-strong focus-within:ring-4 focus-within:ring-[rgba(250,125,56,0.14)]">
+                  <Users className="shrink-0 text-ms-muted" size={19} strokeWidth={2.1} />
+                  <input
+                    className="h-full min-w-0 flex-1 bg-transparent text-[17px] font-extrabold text-ms-ink outline-none placeholder:text-ms-muted"
+                    onChange={(event) => setInviteCode(event.target.value)}
+                    placeholder="가족에게 받은 초대 코드"
+                    value={inviteCode}
+                  />
+                </span>
+              </label>
+
+              <div className="space-y-2.5">
+                <button
+                  className="flex h-14 w-full items-center justify-center rounded-full bg-ms-brand text-[17px] font-extrabold text-ms-on-brand transition active:scale-[0.99] active:bg-ms-brand-pressed disabled:opacity-60"
+                  disabled={isBusy}
+                  type="submit"
+                >
                   {inviteCode.trim() ? "초대 코드로 합류" : "초대 코드 없이 진행"}
-                </Button>
+                </button>
                 {inviteCode.trim() && (
-                  <Button disabled={isBusy} type="button" variant="outline" onClick={() => setFlowStep("dog")}>
+                  <button
+                    className="flex h-14 w-full items-center justify-center rounded-full border border-ms-line bg-ms-card text-[16px] font-extrabold text-ms-ink transition active:bg-ms-sunken disabled:opacity-60"
+                    disabled={isBusy}
+                    onClick={() => setFlowStep("dog")}
+                    type="button"
+                  >
                     새 강아지 등록
-                  </Button>
+                  </button>
                 )}
               </div>
             </form>
-          </CardContent>
-        </Card>
-      )}
+          </section>
+        )}
 
-      {status?.nextStep === "dog-or-invite" && flowStep === "dog" && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Dog size={20} /> 강아지 등록
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {!options && <div className="rounded-md border border-border bg-muted p-3 text-sm font-bold">선택지를 불러오는 중이에요.</div>}
-            <form className="grid gap-3" onSubmit={dogForm.handleSubmit(submitDog)}>
-              <Input placeholder="이름" {...dogForm.register("name")} />
+        {status?.nextStep === "dog-or-invite" && flowStep === "dog" && (
+          <section className="mt-8">
+            <p className="text-[15px] font-bold leading-none text-ms-emphasis">반려견 등록</p>
+            <h2 className="mt-3 text-[26px] font-extrabold leading-[1.22] text-ms-ink">
+              반려견 프로필을
+              <br />
+              등록해주세요.
+            </h2>
+            <p className="mt-3 text-[15px] font-medium leading-[1.55] text-ms-secondary">
+              산책 성격과 기본 정보를 먼저 저장해두면 이후 추천을 더 차분하게 맞출 수 있어요.
+            </p>
 
-              <div className="grid gap-2 rounded-md border border-border bg-muted p-3">
-                <span className="text-sm font-black">다른 강아지를 만나면 어떤가요?</span>
-                <div className="grid gap-2 sm:grid-cols-3">
+            {!options && (
+              <div className="mt-5 rounded-[18px] bg-ms-sunken px-4 py-3 text-[13px] font-bold text-ms-emphasis">
+                선택지를 불러오는 중이에요.
+              </div>
+            )}
+
+            <form className="mt-7 space-y-4" onSubmit={dogForm.handleSubmit(submitDog)}>
+              <label className="block">
+                <span className="text-[14px] font-bold leading-none text-ms-secondary">반려견 이름</span>
+                <span className="mt-2 flex h-14 items-center gap-3 rounded-[18px] border border-ms-line bg-ms-card px-4 focus-within:border-ms-line-strong focus-within:ring-4 focus-within:ring-[rgba(250,125,56,0.14)]">
+                  <Dog className="shrink-0 text-ms-muted" size={19} strokeWidth={2.1} />
+                  <input
+                    className="h-full min-w-0 flex-1 bg-transparent text-[17px] font-extrabold text-ms-ink outline-none placeholder:text-ms-muted"
+                    placeholder="이름"
+                    {...dogForm.register("name")}
+                  />
+                </span>
+              </label>
+
+              <label className="block">
+                <span className="text-[14px] font-bold leading-none text-ms-secondary">견종</span>
+                <span className="relative mt-2 flex h-14 items-center rounded-[18px] border border-ms-line bg-ms-card px-4 focus-within:border-ms-line-strong focus-within:ring-4 focus-within:ring-[rgba(250,125,56,0.14)]">
+                  <select
+                    className="h-full min-w-0 flex-1 appearance-none bg-transparent pr-8 text-[17px] font-extrabold text-ms-ink outline-none disabled:text-ms-muted"
+                    disabled={!options}
+                    {...dogForm.register("breed")}
+                  >
+                    {(options?.breeds ?? []).map((breed) => (
+                      <option key={breed.id} value={breed.id}>
+                        {breed.nameKo} ({breed.nameEn})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-4 text-ms-muted" size={18} strokeWidth={2} />
+                </span>
+              </label>
+
+              <label className="block">
+                <span className="text-[14px] font-bold leading-none text-ms-secondary">생년월일</span>
+                <span className="mt-2 flex h-14 items-center rounded-[18px] border border-ms-line bg-ms-card px-4 focus-within:border-ms-line-strong focus-within:ring-4 focus-within:ring-[rgba(250,125,56,0.14)]">
+                  <input
+                    className="h-full min-w-0 flex-1 bg-transparent text-[17px] font-extrabold text-ms-ink outline-none"
+                    type="date"
+                    {...dogForm.register("birthDate")}
+                  />
+                </span>
+              </label>
+
+              <label className="block">
+                <span className="text-[14px] font-bold leading-none text-ms-secondary">체중</span>
+                <span className="mt-2 flex h-14 items-center rounded-[18px] border border-ms-line bg-ms-card px-4 focus-within:border-ms-line-strong focus-within:ring-4 focus-within:ring-[rgba(250,125,56,0.14)]">
+                  <input
+                    className="h-full min-w-0 flex-1 bg-transparent text-[17px] font-extrabold text-ms-ink outline-none"
+                    inputMode="decimal"
+                    placeholder="0.0"
+                    step="0.1"
+                    type="number"
+                    {...dogForm.register("weightKg", { valueAsNumber: true })}
+                  />
+                  <span className="ml-2 text-[15px] font-bold text-ms-muted">kg</span>
+                </span>
+              </label>
+
+              <div className="pt-2">
+                <h3 className="text-[17px] font-extrabold leading-[1.3] text-ms-ink">
+                  다른 강아지를 만나면 어떤가요?
+                </h3>
+                <div className="mt-3 grid grid-cols-3 gap-2">
                   {(options?.socialPreferences ?? []).map((option) => {
                     const selected = selectedSocialPreference === option.value;
                     return (
-                      <button className={`min-h-11 rounded-md border px-3 text-sm font-bold ${selected ? "border-primary bg-green-50 text-primary" : "border-border bg-white text-foreground"}`} key={option.value} type="button" onClick={() => dogForm.setValue("socialPreference", option.value as "likes_dogs" | "avoids_dogs" | "neutral", { shouldDirty: true, shouldValidate: true })}>
+                      <button
+                        aria-pressed={selected}
+                        className={`h-12 rounded-full border text-[14px] font-extrabold transition ${
+                          selected
+                            ? "border-ms-brand bg-ms-brand text-ms-on-brand"
+                            : "border-ms-line bg-ms-card text-ms-secondary"
+                        }`}
+                        key={option.value}
+                        onClick={() =>
+                          dogForm.setValue(
+                            "socialPreference",
+                            option.value as "likes_dogs" | "avoids_dogs" | "neutral",
+                            { shouldDirty: true, shouldValidate: true }
+                          )
+                        }
+                        type="button"
+                      >
                         {option.label}
                       </button>
                     );
@@ -314,80 +470,116 @@ export function OnboardingScreen() {
                 </div>
               </div>
 
-              <div className="grid gap-2 rounded-md border border-border bg-muted p-3">
-                <div className="flex items-center justify-between gap-2 text-sm font-black">
-                  <span>성격 태그</span>
-                  <span className="text-muted-foreground">{selectedPersonalityTags.length} / 3</span>
+              <div className="pt-2">
+                <div className="flex items-end justify-between gap-4">
+                  <h3 className="text-[17px] font-extrabold leading-none text-ms-ink">산책 성격 키워드</h3>
+                  <span className="rounded-full bg-ms-sunken px-3 py-1.5 text-[13px] font-extrabold text-ms-emphasis">
+                    {selectedPersonalityTags.length} / 3
+                  </span>
                 </div>
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   {(options?.personalityTags ?? []).map((option) => {
                     const selected = selectedPersonalityTags.includes(option.value);
                     const disabled = !selected && selectedPersonalityTags.length >= 3;
                     return (
-                      <button className={`min-h-11 rounded-md border px-3 text-left text-sm font-bold ${selected ? "border-primary bg-green-50 text-primary" : "border-border bg-white text-foreground"} ${disabled ? "cursor-not-allowed opacity-50" : ""}`} disabled={disabled} key={option.value} type="button" onClick={() => togglePersonalityTag(option.value)}>
+                      <button
+                        aria-pressed={selected}
+                        className={`flex min-h-11 items-center gap-1.5 rounded-full border px-4 text-[14px] font-bold transition ${
+                          selected
+                            ? "border-ms-brand bg-ms-brand text-ms-on-brand"
+                            : "border-ms-line bg-ms-card text-ms-secondary"
+                        } ${disabled ? "opacity-45" : ""}`}
+                        disabled={disabled}
+                        key={option.value}
+                        onClick={() => togglePersonalityTag(option.value)}
+                        type="button"
+                      >
                         {option.label}
                       </button>
                     );
                   })}
                 </div>
-                <p className="text-xs font-bold text-muted-foreground">6개 중 최대 3개까지 고를 수 있어요.</p>
+                <p className="mt-3 flex items-start gap-2 text-[13px] font-medium leading-[1.5] text-ms-muted">
+                  <Info className="mt-0.5 shrink-0" size={15} strokeWidth={2} />
+                  최대 3개까지 선택할 수 있고, 산책 코스의 소음·사람 밀도·길 분위기를 고르는 데 사용돼요.
+                </p>
               </div>
 
-              <select
-                className="h-11 rounded-md border border-border bg-white px-3 text-sm font-bold"
-                {...dogForm.register("breed")}
+              <button
+                className="flex h-14 w-full items-center justify-center rounded-full bg-ms-brand text-[17px] font-extrabold text-ms-on-brand transition active:scale-[0.99] active:bg-ms-brand-pressed disabled:opacity-60"
+                disabled={isBusy}
+                type="submit"
               >
-                {(options?.breeds ?? []).map((breed) => (
-                  <option key={breed.id} value={breed.id}>
-                    {breed.nameKo} ({breed.nameEn})
-                  </option>
-                ))}
-              </select>
-              <Input type="date" {...dogForm.register("birthDate")} />
-              <Input inputMode="decimal" placeholder="몸무게 kg" {...dogForm.register("weightKg", { valueAsNumber: true })} />
-              <Button disabled={isBusy} type="submit">강아지 등록 후 케어 횟수 정하기</Button>
+                강아지 등록 후 케어 횟수 정하기
+              </button>
             </form>
-          </CardContent>
-        </Card>
-      )}
+          </section>
+        )}
 
-      {status?.nextStep === "dog-or-invite" && flowStep === "care" && (
-        <Card>
-          <CardHeader><CardTitle>하루 케어 횟수</CardTitle></CardHeader>
-          <CardContent>
-            <div className="grid gap-3">
-              <p className="text-sm font-bold text-muted-foreground">오늘부터 셰어링 탭과 메인 탭에 보일 밥·약·산책 횟수를 정해 주세요.</p>
+        {status?.nextStep === "dog-or-invite" && flowStep === "care" && (
+          <section className="mt-8">
+            <p className="text-[15px] font-bold leading-none text-ms-emphasis">마지막 단계</p>
+            <h2 className="mt-3 text-[26px] font-extrabold leading-[1.22] text-ms-ink">
+              하루 케어 횟수를
+              <br />
+              정해주세요.
+            </h2>
+            <p className="mt-3 text-[15px] font-medium leading-[1.55] text-ms-secondary">
+              오늘부터 셰어링 탭과 메인 탭에 보일 밥·약·산책 횟수예요.
+            </p>
+
+            <div className="mt-7 space-y-4">
               {SHARING_CARE_KINDS.map((kind) => (
-                <label className="grid gap-2 rounded-md border border-border bg-muted p-3" key={kind}>
-                  <span className="text-sm font-black">{CARE_LABELS[kind]}</span>
-                  <select
-                    className="h-11 rounded-md border border-border bg-white px-3 text-sm font-bold"
-                    value={drafts[kind].count}
-                    onChange={(event) => updateCareCount(kind, Number(event.target.value))}
-                  >
-                    {CARE_COUNT_OPTIONS.map((count) => (
-                      <option key={count} value={count}>
-                        {count === 0 ? "0회 (안 함)" : `${count}회`}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="rounded-[18px] border border-ms-line bg-ms-card px-4 py-4" key={kind}>
+                  <div className="flex items-center gap-2">
+                    <ListChecks className="text-ms-muted" size={18} strokeWidth={2.1} />
+                    <span className="text-[15px] font-extrabold text-ms-ink">{CARE_LABELS[kind]}</span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-4 gap-2">
+                    {CARE_COUNT_OPTIONS.map((count) => {
+                      const selected = drafts[kind].count === count;
+                      return (
+                        <button
+                          aria-pressed={selected}
+                          className={`h-11 rounded-full border text-[14px] font-extrabold transition ${
+                            selected
+                              ? "border-ms-brand bg-ms-brand text-ms-on-brand"
+                              : "border-ms-line bg-ms-sunken text-ms-secondary"
+                          }`}
+                          key={count}
+                          onClick={() => updateCareCount(kind, count)}
+                          type="button"
+                        >
+                          {count === 0 ? "안 함" : `${count}회`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               ))}
-              <Button disabled={isBusy} type="button" onClick={submitCareRoutines}>온보딩 완료</Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {(message || error) && (
-        <div
-          className={`rounded-lg border p-3 text-sm font-bold ${
-            error ? "border-destructive/30 bg-red-50 text-destructive" : "border-primary/20 bg-green-50 text-primary"
-          }`}
-        >
-          {error || message}
-        </div>
-      )}
-    </div>
+              <button
+                className="flex h-14 w-full items-center justify-center rounded-full bg-ms-brand text-[17px] font-extrabold text-ms-on-brand transition active:scale-[0.99] active:bg-ms-brand-pressed disabled:opacity-60"
+                disabled={isBusy}
+                onClick={submitCareRoutines}
+                type="button"
+              >
+                온보딩 완료
+              </button>
+            </div>
+          </section>
+        )}
+
+        {(message || error) && (
+          <p
+            className={`mt-5 rounded-[16px] px-4 py-3 text-center text-[13px] font-bold ${
+              error ? "bg-ms-warn-bg text-ms-warn-fg" : "bg-ms-ok-bg text-ms-ok-fg"
+            }`}
+          >
+            {error || message}
+          </p>
+        )}
+      </div>
+    </main>
   );
 }

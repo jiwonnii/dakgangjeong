@@ -1,12 +1,11 @@
 "use client";
 
-import { Footprints, LocateFixed, MapPinned, RefreshCw, Route } from "lucide-react";
+import { Footprints, LocateFixed, MapPin, RefreshCw, Route } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth-context";
 import { KakaoRouteMap } from "../kakao-route-map";
 import { MAX_RECOMMENDATION_GPS_ACCURACY_M, watchAccurateCurrentOrigin } from "../lib/geolocation";
 import type { DurationOptions, LatLon, RecommendationResponse } from "../lib/types";
-import { Button, Card, CardContent, CardHeader, CardTitle } from "../ui";
 import { WalkRecorderPanel } from "../walk-recorder-panel-next";
 import { CourseResults } from "./course-results";
 import { DurationPicker, type DurationChoice } from "./duration-picker";
@@ -160,109 +159,122 @@ export function WalkTab() {
     return null;
   }
 
+  const originLabel =
+    originSource === "gps" ? "현재 GPS 위치" : originSource === "manual" ? "지도에서 선택한 위치" : "기본 위치";
+
   return (
-    <>
-      {showPlanning && (
-        <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MapPinned size={20} /> {primaryDog.name} 산책하기
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <KakaoRouteMap
-            appKey={kakaoMapAppKey}
-            courses={courses}
-            origin={origin}
-            onOriginPicked={pickOriginFromMap}
-          />
-
-          <div className="grid gap-2 rounded-md border border-border bg-muted p-3 text-sm font-bold">
-            <span className="text-muted-foreground">출발 위치</span>
-            <strong>
-              {originSource === "gps"
-                ? "현재 GPS 위치"
-                : originSource === "manual"
-                  ? "지도에서 선택한 위치"
-                  : "기본 위치"}
-            </strong>
-            <span>
-              {origin.lat.toFixed(6)}, {origin.lon.toFixed(6)}
-            </span>
-            {gpsAccuracyMeters !== null && (
-              <span
-                className={
-                  gpsAccuracyMeters <= MAX_RECOMMENDATION_GPS_ACCURACY_M ? "text-primary" : "text-destructive"
-                }
-              >
-                GPS 정확도 +/-{Math.round(gpsAccuracyMeters)}m
-              </span>
-            )}
-          </div>
-
-          {mode === "choose" && (
-            <>
-              <DurationPicker
-                choice={choice}
-                customMinutes={customMinutes}
-                durationOptions={durationOptions}
-                onChoiceChange={setChoice}
-                onCustomMinutesChange={setCustomMinutes}
-              />
-
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Button type="button" variant="outline" onClick={useCurrentLocation}>
-                  <LocateFixed size={17} /> 현재 위치
-                </Button>
-                <Button disabled={isBusy} type="button" onClick={onPrimaryAction}>
-                  {isBusy ? (
-                    <RefreshCw className="animate-spin" size={17} />
-                  ) : choice === "free" ? (
-                    <Footprints size={17} />
-                  ) : (
-                    <Route size={17} />
-                  )}
-                  {choice === "free" ? "산책 시작" : "코스 추천"}
-                </Button>
+    <main className="flex min-h-screen w-full justify-center bg-ms-page">
+      <div className="relative w-full max-w-[375px] bg-ms-page text-ms-ink">
+        {showPlanning && (
+          <>
+            {/* 카카오맵 위에 출발지 표시 핀 + GPS 정확도 칩을 얹는다.
+                meoksa_FE 의 MapPreview 자리를 실제 KakaoRouteMap 으로 대체한 것 —
+                코스 선택 전에는 여기서 코스 후보들과 출발지를 함께 보여준다. */}
+            <section className="relative overflow-hidden bg-ms-sunken">
+              <div className="pointer-events-none absolute left-[16px] top-[16px] z-10 flex h-[36px] items-center gap-[8px] rounded-full bg-ms-card px-[14px] text-[13px] font-bold text-ms-ink shadow-sm">
+                <MapPin className="text-ms-emphasis-green" size={17} />
+                {originLabel}
               </div>
-            </>
-          )}
-        </CardContent>
-        </Card>
-      )}
+              {gpsAccuracyMeters !== null && (
+                <div
+                  className={`pointer-events-none absolute right-[16px] top-[16px] z-10 rounded-full bg-ms-card px-[12px] py-[7px] text-[11px] font-bold shadow-sm ${
+                    gpsAccuracyMeters <= MAX_RECOMMENDATION_GPS_ACCURACY_M ? "text-ms-emphasis-green" : "text-ms-warn-fg"
+                  }`}
+                >
+                  GPS +/-{Math.round(gpsAccuracyMeters)}m
+                </div>
+              )}
+              <KakaoRouteMap
+                appKey={kakaoMapAppKey}
+                courses={courses}
+                origin={origin}
+                onOriginPicked={pickOriginFromMap}
+              />
+            </section>
 
-      {showPlanning && (message || error) && (
-        <div
-          className={`rounded-lg border p-3 text-sm font-bold ${
-            error ? "border-destructive/30 bg-red-50 text-destructive" : "border-primary/20 bg-green-50 text-primary"
-          }`}
-        >
-          {error || message}
-        </div>
-      )}
+            <section className="relative z-0 -mt-[20px] rounded-t-[32px] bg-ms-page px-[24px] pt-[24px] pb-[24px]">
+              <div className="flex items-end justify-between gap-[10px]">
+                <div>
+                  <p className="text-[12px] font-bold leading-none text-ms-emphasis-green">Route picks</p>
+                  <h1 className="mt-[8px] text-[22px] font-extrabold leading-none">
+                    {primaryDog.name} 산책 코스 선택
+                  </h1>
+                </div>
+                <button
+                  className="flex shrink-0 items-center gap-[4px] rounded-full bg-ms-card px-[11px] py-[7px] text-[11px] font-bold text-ms-secondary shadow-sm active:bg-ms-sunken"
+                  onClick={useCurrentLocation}
+                  type="button"
+                >
+                  <LocateFixed size={13} /> 현재 위치
+                </button>
+              </div>
 
-      {showPlanning && mode === "results" && recommendation?.status === "ok" && (
-        <CourseResults
-          courses={courses}
-          isBusy={isBusy}
-          selectedRank={selectedRank}
-          warnings={recommendation.warnings}
-          onBack={() => setMode("choose")}
-          onRefresh={() => requestRecommendations({ refresh: true })}
-          onSelectRank={setSelectedRank}
+              {mode === "choose" && (
+                <>
+                  <DurationPicker
+                    choice={choice}
+                    customMinutes={customMinutes}
+                    durationOptions={durationOptions}
+                    onChoiceChange={setChoice}
+                    onCustomMinutesChange={setCustomMinutes}
+                  />
+
+                  <button
+                    className="mt-[14px] flex h-[56px] w-full items-center justify-center gap-[10px] rounded-full bg-ms-action-green text-[15px] font-extrabold text-ms-on-green shadow-sm active:bg-ms-action-green-pressed disabled:opacity-60"
+                    disabled={isBusy}
+                    onClick={onPrimaryAction}
+                    type="button"
+                  >
+                    {isBusy ? (
+                      <RefreshCw className="animate-spin" size={18} />
+                    ) : choice === "free" ? (
+                      <Footprints size={18} />
+                    ) : (
+                      <Route size={18} />
+                    )}
+                    {choice === "free" ? "자유 산책 시작하기" : "이 시간으로 코스 추천받기"}
+                  </button>
+                </>
+              )}
+
+              {(message || error) && (
+                <div
+                  className={`mt-[14px] rounded-[14px] px-[14px] py-[12px] text-[13px] font-bold ${
+                    error ? "bg-ms-warn-bg text-ms-warn-fg" : "bg-ms-ok-bg text-ms-ok-fg"
+                  }`}
+                >
+                  {error || message}
+                </div>
+              )}
+
+              {mode === "results" && recommendation?.status === "ok" && (
+                <div className="mt-[14px]">
+                  <CourseResults
+                    courses={courses}
+                    isBusy={isBusy}
+                    selectedRank={selectedRank}
+                    warnings={recommendation.warnings}
+                    onBack={() => setMode("choose")}
+                    onRefresh={() => requestRecommendations({ refresh: true })}
+                    onSelectRank={setSelectedRank}
+                  />
+                </div>
+              )}
+            </section>
+          </>
+        )}
+
+        <WalkRecorderPanel
+          dogId={primaryDog.id}
+          dogName={primaryDog.name}
+          kakaoMapAppKey={kakaoMapAppKey}
+          selectedCourse={selectedCourse}
+          startSignal={startSignal}
+          token={token}
+          onWalkCompleted={handleWalkCompleted}
+          onWalkStatusChange={setWalkStage}
         />
-      )}
-
-      <WalkRecorderPanel
-        dogId={primaryDog.id}
-        dogName={primaryDog.name}
-        kakaoMapAppKey={kakaoMapAppKey}
-        selectedCourse={selectedCourse}
-        startSignal={startSignal}
-        token={token}
-        onWalkCompleted={handleWalkCompleted}
-        onWalkStatusChange={setWalkStage}
-      />
-    </>
+      </div>
+    </main>
   );
 }
