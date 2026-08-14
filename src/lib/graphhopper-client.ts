@@ -99,6 +99,17 @@ function buildRequestBody(request: RoundTripRequest): Record<string, unknown> {
   };
 }
 
+function buildRouteUrl(): string {
+  const baseUrl = env.GRAPHHOPPER_URL.replace(/\/$/, "");
+  const url = new URL(`${baseUrl}/route`);
+
+  if (env.GRAPHHOPPER_API_KEY) {
+    url.searchParams.set("key", env.GRAPHHOPPER_API_KEY);
+  }
+
+  return url.toString();
+}
+
 /**
  * Requests a single round-trip route. Throws AppError on any GraphHopper
  * error (non-2xx status, or a 2xx response with no usable path — e.g. the
@@ -106,7 +117,7 @@ function buildRequestBody(request: RoundTripRequest): Record<string, unknown> {
  * GraphHopper's internal retries, per spec 5.4 round_trip 동작 step 2).
  */
 export async function requestRoundTripRoute(request: RoundTripRequest): Promise<GraphHopperPath> {
-  const url = `${env.GRAPHHOPPER_URL.replace(/\/$/, "")}/route`;
+  const url = buildRouteUrl();
 
   let response: Response;
 

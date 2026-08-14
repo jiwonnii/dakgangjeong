@@ -33,6 +33,7 @@ const envSchema = z.object({
   GRAPHHOPPER_URL: z
     .preprocess(emptyStringToUndefined, z.string().url().optional())
     .default("http://localhost:8989"),
+  GRAPHHOPPER_API_KEY: z.preprocess(emptyStringToUndefined, z.string().optional()),
   /** TMAP(SK Open API) 앱 키. 공공데이터포털 키와는 별개 발급 (12회차,
    * 횡단보도/계단 비동기 검증). */
   TMAP_APP_KEY: z.preprocess(emptyStringToUndefined, z.string().optional()),
