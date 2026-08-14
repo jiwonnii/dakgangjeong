@@ -53,7 +53,7 @@ import { isCoverageSufficient, selectTopBearings } from "../domain/bearing-selec
 import { generateRouteCandidates, type RouteGenerationFailure } from "./route-generation.service";
 import { fetchOriginContext, scoreRouteCandidates, type CourseFacts, type OriginContext } from "./scoring.service";
 import { applyHardFilters } from "../domain/scoring-filter";
-import { rankByWeightedScore, type ScoreBreakdown } from "../domain/scoring-weighted";
+import { rankByWeightedScore, type ScoredCourse, type ScoreBreakdown } from "../domain/scoring-weighted";
 import { selectFinalCourses } from "../domain/course-selection";
 import type { DogPersonalityTag, DogSocialPreference, DurationChoice } from "../../../types/domain";
 
@@ -118,6 +118,7 @@ export type RecommendedCourseExplanation = {
     weight: number;
     contribution: number;
     detail: string;
+    preferenceAdjustment?: number;
   }>;
 };
 
@@ -130,6 +131,7 @@ export type RecommendedCourse = {
   breakdown: Pick<ScoreBreakdown, "safety" | "comfort" | "fit">;
   scoreDetails: RecommendedCourseScoreDetails;
   explanation: RecommendedCourseExplanation;
+  preferenceInsight?: string | null;
   facts: RecommendedCourseFacts;
   path: { type: "LineString"; coordinates: [number, number][] };
 };
@@ -156,7 +158,7 @@ const recommendationCache = new TtlCache<string, RecommendationResult>(
   RECOMMENDATION_CACHE_TTL_SECONDS
 );
 
-const RECOMMENDATION_CACHE_VERSION = "route-score-v3";
+const RECOMMENDATION_CACHE_VERSION = "route-score-v5-fill-three-courses";
 const ROUTE_SIGNATURE_PRECISION = 10000;
 const ROUTE_SIGNATURE_SAMPLE_COUNT = 24;
 
@@ -169,6 +171,234 @@ type DogRow = {
   personality_tags: DogPersonalityTag[] | null;
   health_notes: string | null;
 };
+
+type ReviewFactorKey = keyof RecommendedCourseScoreDetails;
+
+type ReviewPreferenceSummary = {
+  totalRecords: number;
+  signalRecords: number;
+  adjustments: Record<ReviewFactorKey, number>;
+  signature: string;
+  insight: string | null;
+};
+
+type WalkReviewPreferenceRow = {
+  rating: number | null;
+  liked_factor: string | null;
+  disliked_factor: string | null;
+};
+
+const REVIEW_FACTOR_KEYS: readonly ReviewFactorKey[] = [
+  "riskZones",
+  "vehicleExposure",
+  "pedestrianSafety",
+  "environment",
+  "familiarity",
+  "fit"
+];
+
+const REVIEW_FACTOR_LABELS: Record<ReviewFactorKey, string> = {
+  riskZones: "위험구간",
+  vehicleExposure: "차량 노출",
+  pedestrianSafety: "보행 위험",
+  environment: "공원/가로수",
+  familiarity: "익숙함/새로움",
+  fit: "거리/시간 적합도"
+};
+
+const REVIEW_FACTOR_SET = new Set<string>(REVIEW_FACTOR_KEYS);
+const REVIEW_PREFERENCE_LOOKBACK_LIMIT = 12;
+const REVIEW_PREFERENCE_MAX_COMPONENT_ADJUSTMENT = 0.08;
+const REVIEW_PREFERENCE_NORMALIZATION_WEIGHT = 8;
+
+function emptyReviewPreferenceSummary(): ReviewPreferenceSummary {
+  return {
+    totalRecords: 0,
+    signalRecords: 0,
+    adjustments: {
+      riskZones: 0,
+      vehicleExposure: 0,
+      pedestrianSafety: 0,
+      environment: 0,
+      familiarity: 0,
+      fit: 0
+    },
+    signature: "none",
+    insight: null
+  };
+}
+
+function isReviewFactorKey(value: string | null): value is ReviewFactorKey {
+  return value !== null && REVIEW_FACTOR_SET.has(value);
+}
+
+function clampReviewAdjustment(value: number): number {
+  return Math.max(
+    -REVIEW_PREFERENCE_MAX_COMPONENT_ADJUSTMENT,
+    Math.min(REVIEW_PREFERENCE_MAX_COMPONENT_ADJUSTMENT, value)
+  );
+}
+
+function roundAdjustment(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function reviewSignalWeight(rating: number | null, polarity: "liked" | "disliked"): number {
+  if (rating === null) {
+    return 0.75;
+  }
+
+  if (polarity === "liked") {
+    return rating >= 4 ? 1 : rating === 3 ? 0.5 : 0.25;
+  }
+
+  return rating <= 2 ? 1.25 : rating === 3 ? 1 : 0.75;
+}
+
+function summarizeReviewPreferences(rows: readonly WalkReviewPreferenceRow[]): ReviewPreferenceSummary {
+  const summary = emptyReviewPreferenceSummary();
+  const likedScores = new Map<ReviewFactorKey, number>();
+  const dislikedScores = new Map<ReviewFactorKey, number>();
+
+  for (const row of rows) {
+    let hasSignal = false;
+
+    if (isReviewFactorKey(row.liked_factor)) {
+      likedScores.set(
+        row.liked_factor,
+        (likedScores.get(row.liked_factor) ?? 0) + reviewSignalWeight(row.rating, "liked")
+      );
+      hasSignal = true;
+    }
+
+    if (isReviewFactorKey(row.disliked_factor)) {
+      dislikedScores.set(
+        row.disliked_factor,
+        (dislikedScores.get(row.disliked_factor) ?? 0) + reviewSignalWeight(row.rating, "disliked")
+      );
+      hasSignal = true;
+    }
+
+    if (hasSignal) {
+      summary.signalRecords += 1;
+    }
+  }
+
+  summary.totalRecords = rows.length;
+
+  const signatureParts: string[] = [];
+  let strongestKey: ReviewFactorKey | null = null;
+  let strongestAdjustment = 0;
+
+  for (const key of REVIEW_FACTOR_KEYS) {
+    const rawAdjustment =
+      ((likedScores.get(key) ?? 0) - (dislikedScores.get(key) ?? 0)) /
+      REVIEW_PREFERENCE_NORMALIZATION_WEIGHT;
+    const adjustment = roundAdjustment(clampReviewAdjustment(rawAdjustment));
+
+    summary.adjustments[key] = adjustment;
+    signatureParts.push(`${key}:${adjustment}`);
+
+    if (Math.abs(adjustment) > Math.abs(strongestAdjustment)) {
+      strongestKey = key;
+      strongestAdjustment = adjustment;
+    }
+  }
+
+  summary.signature = summary.signalRecords > 0 ? signatureParts.join("|") : "none";
+  summary.insight = strongestKey
+    ? strongestAdjustment > 0
+      ? `최근 산책 리뷰에서 ${REVIEW_FACTOR_LABELS[strongestKey]} 만족도가 높아 이 요소를 조금 더 반영했어요.`
+      : `최근 산책 리뷰에서 ${REVIEW_FACTOR_LABELS[strongestKey]} 아쉬움이 있어 이 요소를 조금 더 보수적으로 봤어요.`
+    : null;
+
+  return summary;
+}
+
+async function loadReviewPreferenceSummary(dogId: string): Promise<ReviewPreferenceSummary> {
+  const supabase = getSupabaseAdminClient();
+
+  const { data, error } = await supabase
+    .from("walk_records")
+    .select("rating, liked_factor, disliked_factor")
+    .eq("dog_id", dogId)
+    .not("ended_at", "is", null)
+    .order("started_at", { ascending: false })
+    .limit(REVIEW_PREFERENCE_LOOKBACK_LIMIT);
+
+  if (error) {
+    if (error.code === "42703") {
+      return emptyReviewPreferenceSummary();
+    }
+
+    throw new AppError(error.message, 500, "WALK_REVIEW_PREFERENCE_LOOKUP_FAILED");
+  }
+
+  return summarizeReviewPreferences((data ?? []) as WalkReviewPreferenceRow[]);
+}
+
+function applyReviewPreferenceAdjustments(
+  courses: readonly ScoredCourse[],
+  preference: ReviewPreferenceSummary
+): ScoredCourse[] {
+  if (preference.signalRecords === 0) {
+    return [...courses];
+  }
+
+  return courses
+    .map((course) => {
+      const components = { ...course.breakdown.components };
+
+      for (const key of REVIEW_FACTOR_KEYS) {
+        components[key] = Math.max(0, Math.min(1, components[key] + preference.adjustments[key]));
+      }
+
+      const weights = course.breakdown.weights;
+      const safety =
+        (components.riskZones * weights.riskZones +
+          components.vehicleExposure * weights.vehicleExposure +
+          components.pedestrianSafety * weights.pedestrianSafety) /
+        (weights.riskZones + weights.vehicleExposure + weights.pedestrianSafety);
+      const comfort =
+        (components.environment * weights.environment + components.familiarity * weights.familiarity) /
+        (weights.environment + weights.familiarity);
+      const totalScore =
+        components.riskZones * weights.riskZones +
+        components.vehicleExposure * weights.vehicleExposure +
+        components.pedestrianSafety * weights.pedestrianSafety +
+        components.environment * weights.environment +
+        components.familiarity * weights.familiarity +
+        components.fit * weights.fit;
+
+      return {
+        ...course,
+        breakdown: {
+          ...course.breakdown,
+          safety,
+          comfort,
+          fit: components.fit,
+          components,
+          totalScore
+        }
+      };
+    })
+    .sort((a, b) => b.breakdown.totalScore - a.breakdown.totalScore);
+}
+
+function preferenceDetailSuffix(
+  key: ReviewFactorKey,
+  preference: ReviewPreferenceSummary
+): string {
+  const adjustment = preference.adjustments[key];
+
+  if (adjustment === 0) {
+    return "";
+  }
+
+  return adjustment > 0
+    ? " 최근 리뷰에서 좋았던 점으로 선택되어 소폭 가산했어요."
+    : " 최근 리뷰에서 아쉬웠던 점으로 선택되어 소폭 감산했어요.";
+}
 
 /** Exported for the lightweight GET /duration-options and GET /warnings
  * controllers, which need a DogProfile but should not run the rest of the
@@ -285,7 +515,8 @@ function buildCacheKey(
   dogId: string,
   durationChoice: DurationChoice,
   customMinutes: number | undefined,
-  now: Date
+  now: Date,
+  reviewPreferenceSignature = "none"
 ): string {
   const gridKey = gridKeyForPoint(origin, BEARING_GRID_CELL_SIZE_M);
   const timeOfDay = resolveTimeOfDayBucket(
@@ -296,7 +527,7 @@ function buildCacheKey(
   );
   const durationKey = durationChoice === "custom" ? `custom:${customMinutes}` : durationChoice;
 
-  return `${RECOMMENDATION_CACHE_VERSION}:${gridKey}:${dogId}:${durationKey}:${timeOfDay}`;
+  return `${RECOMMENDATION_CACHE_VERSION}:${gridKey}:${dogId}:${durationKey}:${timeOfDay}:review:${reviewPreferenceSignature}`;
 }
 
 type WalkCourseCacheRow = {
@@ -451,7 +682,8 @@ function buildCourseExplanation(
   facts: CourseFacts,
   breakdown: ScoreBreakdown,
   profile: DogProfile,
-  targetMeters: number
+  targetMeters: number,
+  reviewPreference: ReviewPreferenceSummary
 ): RecommendedCourseExplanation {
   const factors: RecommendedCourseExplanation["factors"] = [
     {
@@ -542,7 +774,8 @@ function toRecommendedCourse(
   facts: CourseFacts,
   breakdown: ScoreBreakdown,
   profile: DogProfile,
-  targetMeters: number
+  targetMeters: number,
+  reviewPreference: ReviewPreferenceSummary
 ): RecommendedCourse {
   return {
     rank,
@@ -559,7 +792,8 @@ function toRecommendedCourse(
       familiarity: roundScore(breakdown.components.familiarity),
       fit: roundScore(breakdown.components.fit)
     },
-    explanation: buildCourseExplanation(facts, breakdown, profile, targetMeters),
+    explanation: buildCourseExplanation(facts, breakdown, profile, targetMeters, reviewPreference),
+    preferenceInsight: reviewPreference.insight,
     facts: {
       vehicleExposure: facts.vehicleExposureAvg,
       parkRatio: facts.parkRatio,
@@ -590,6 +824,7 @@ export async function recommendWalkRoutes(
   now: Date = new Date()
 ): Promise<RecommendationResult> {
   const profile = await loadDogProfile(request.dogId, now);
+  const reviewPreference = await loadReviewPreferenceSummary(request.dogId);
   // 모험적인 성격은 매번 새 코스를 뽑는 게 의도라 애초에 캐시를 쓰지 않는다.
   const shouldUseRecommendationCache = !profile.personality.isAdventurous;
   // "다시 추천받기"(refresh)는 읽기만 건너뛴다. 쓰기는 그대로 해서 이어지는
@@ -605,7 +840,8 @@ export async function recommendWalkRoutes(
     request.dogId,
     request.durationChoice,
     request.customMinutes,
-    now
+    now,
+    reviewPreference.signature
   );
 
   if (shouldReadCache) {
@@ -694,8 +930,13 @@ export async function recommendWalkRoutes(
     originContext
   );
 
-  const finalSelection = selectFinalCourses(
+  const adjustedWithReviewPreferences = applyReviewPreferenceAdjustments(
     orderedWithBreakdown,
+    reviewPreference
+  );
+
+  const finalSelection = selectFinalCourses(
+    adjustedWithReviewPreferences,
     (item) => item.facts.bearing.bin,
     (item) => buildRouteSignature(item.facts.points)
   );
@@ -703,7 +944,7 @@ export async function recommendWalkRoutes(
   const result: RecommendationResult = {
     status: "ok",
     courses: finalSelection.map((item, index) =>
-      toRecommendedCourse(index + 1, item.facts, item.breakdown, profile, targetMeters)
+      toRecommendedCourse(index + 1, item.facts, item.breakdown, profile, targetMeters, reviewPreference)
     ),
     warnings: warningEvaluation.warnings,
     durationOptions,

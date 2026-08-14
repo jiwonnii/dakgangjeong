@@ -32,6 +32,20 @@ type WalkRecorderPanelProps = {
     distanceMeters: number;
     durationMinutes: number;
     score: number;
+    aiExplanation?: string;
+    explanation?: {
+      summary?: string;
+      factors?: Array<{
+        key: string;
+        label: string;
+        score?: number;
+        weight?: number;
+        contribution?: number;
+        detail?: string;
+        preferenceAdjustment?: number;
+      }>;
+    };
+    facts?: Record<string, unknown>;
     path?: WalkRecordRouteGeoJson;
   } | null;
   /**
@@ -77,6 +91,10 @@ function selectedCourseToRecommendedCourse(
     direction: course.direction,
     distanceMeters: course.distanceMeters,
     durationMinutes: course.durationMinutes,
+    score: course.score,
+    aiExplanation: course.aiExplanation,
+    explanation: course.explanation,
+    facts: course.facts,
     path: course.path ?? { type: "LineString", coordinates: [] }
   };
 }
@@ -95,11 +113,14 @@ export function WalkRecorderPanel({
   const [rating, setRating] = useState(5);
   const [likedNotes, setLikedNotes] = useState("");
   const [dislikedNotes, setDislikedNotes] = useState("");
+  const [likedFactor, setLikedFactor] = useState("");
+  const [dislikedFactor, setDislikedFactor] = useState("");
   const [isReviewing, setIsReviewing] = useState(false);
   const [panelMessage, setPanelMessage] = useState("");
 
   const savedRoute = useMemo(() => routeGeoJsonToPolyline(walk.serverRecord?.routeGeoJson ?? null), [walk.serverRecord?.routeGeoJson]);
   const selectedCourseRoute = useMemo(() => coursePathToPolyline(selectedCourse), [selectedCourse]);
+  const reviewFactors = useMemo(() => selectedCourse?.explanation?.factors ?? [], [selectedCourse]);
   const previewPoints = useMemo(
     () => (walk.polyline.length > 0 ? walk.polyline : savedRoute.length > 0 ? savedRoute : selectedCourseRoute),
     [savedRoute, selectedCourseRoute, walk.polyline]
@@ -155,6 +176,8 @@ export function WalkRecorderPanel({
     setPanelMessage("");
     const record = await walk.finishWalk({
       rating,
+      likedFactor: likedFactor || undefined,
+      dislikedFactor: dislikedFactor || undefined,
       likedNotes: likedNotes || undefined,
       dislikedNotes: dislikedNotes || undefined
     });
@@ -162,6 +185,8 @@ export function WalkRecorderPanel({
     setIsReviewing(false);
     setLikedNotes("");
     setDislikedNotes("");
+    setLikedFactor("");
+    setDislikedFactor("");
     setRating(5);
     onWalkCompleted?.();
     walk.reset();
@@ -204,6 +229,44 @@ export function WalkRecorderPanel({
               <Waypoints size={17} /> {formatDistance(walk.distanceMeters)}
             </div>
           </div>
+
+          {reviewFactors.length > 0 && (
+            <div className="grid gap-3 rounded-md border border-border bg-muted p-3 text-sm font-bold">
+              <span className="text-muted-foreground">추천 판단 근거 피드백</span>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="grid gap-1">
+                  좋았던 판단 근거
+                  <select
+                    className="min-h-12 rounded-md border border-input bg-background px-3 text-sm font-bold"
+                    value={likedFactor}
+                    onChange={(event) => setLikedFactor(event.target.value)}
+                  >
+                    <option value="">선택 안 함</option>
+                    {reviewFactors.map((factor) => (
+                      <option key={`liked-${factor.key}`} value={factor.key}>
+                        {factor.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-1">
+                  아쉬웠던 판단 근거
+                  <select
+                    className="min-h-12 rounded-md border border-input bg-background px-3 text-sm font-bold"
+                    value={dislikedFactor}
+                    onChange={(event) => setDislikedFactor(event.target.value)}
+                  >
+                    <option value="">선택 안 함</option>
+                    {reviewFactors.map((factor) => (
+                      <option key={`disliked-${factor.key}`} value={factor.key}>
+                        {factor.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            </div>
+          )}
 
           <div className="grid gap-3 sm:grid-cols-[120px_1fr_1fr]">
             <label className="grid gap-1 text-sm font-bold">

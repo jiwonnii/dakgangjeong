@@ -102,8 +102,10 @@ export type RecommendedCourse = {
       weight: number;
       contribution: number;
       detail: string;
+      preferenceAdjustment?: number;
     }>;
   };
+  preferenceInsight?: string | null;
   facts: {
     riskZoneCount: number;
     vehicleExposure: number | null;

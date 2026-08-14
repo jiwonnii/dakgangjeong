@@ -145,3 +145,9 @@ npm.cmd run db:check     # 코드가 기대하는 스키마와 실제 DB 비교
 `.env`, `.env.local`, `DATABASE_URL`은 절대 커밋하지 않는다.
 `GET /api/dev/demo-session`은 자격 증명 검사 없이 유효한 토큰을 발급한다.
 개발 전용이며 배포 환경에 도달해서는 안 된다.
+
+## 참고
+
+프론트엔드 리디자인(그린 테마) 작업은 별도 저장소 `C:\meoksa_FE`에서 진행한다.
+이 저장소(`meoksa_BE`)는 백엔드 + 기존 실사용 `app/` UI 기준을 유지하는 용도로만 쓴다.
+FE 쪽 디자인/기능 가이드는 `C:\meoksa_FE\AGENTS.md` 참고.
