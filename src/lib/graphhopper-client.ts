@@ -13,6 +13,8 @@
  *   - 단 `ch.disable: true`를 함께 보내면 무료 플랜에서 400
  *     "Free packages cannot use flexible mode"로 거절된다. 셀프호스팅에서는
  *     반대로 custom model에 이 플래그가 필요하다 — buildRequestBody 참고.
+ *   - `profile`도 클라우드에서는 car/bike/foot만 받는다. 셀프호스팅 전용
+ *     커스텀 프로파일 이름은 거절된다 — 같은 함수 참고.
  */
 
 import { AppError } from "./app-error";
@@ -83,7 +85,12 @@ type RawGraphHopperResponse = {
 function buildRequestBody(request: RoundTripRequest): Record<string, unknown> {
   const body: Record<string, unknown> = {
     points: [[request.origin.lon, request.origin.lat]],
-    profile: request.profile,
+    // 클라우드 API는 car/bike/foot만 받고, 셀프호스팅 config.yml에 정의한
+    // 커스텀 프로파일(GRAPHHOPPER_FOOT_PROFILE_NAME = "foot_custom")을 주면
+    // 400 "the profile parameter can only be one of [car, bike, foot]"으로
+    // 거절한다. custom model은 두 경우 모두 body로 함께 전달되므로 보행
+    // 가중치 자체는 그대로 적용된다.
+    profile: env.GRAPHHOPPER_API_KEY ? "foot" : request.profile,
     algorithm: "round_trip",
     "round_trip.distance": request.distanceMeters,
     "round_trip.seed": request.seed,
