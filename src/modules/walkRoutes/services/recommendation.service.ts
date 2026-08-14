@@ -450,16 +450,23 @@ export async function evaluateWarningsAndDuration(
   origin: LatLon,
   now: Date
 ): Promise<{ warningEvaluation: WarningEvaluation; durationOptions: DurationOptions }> {
+  // 에어코리아(data.go.kr)는 간헐적으로 504 SERVICETIMEOUT_ERROR를 낸다.
+  // 미세먼지를 못 읽었다고 산책 추천 자체를 막을 이유는 없으므로 실패를
+  // 삼킨다. 이때 pm10/pm25는 weather.provider.ts가 넣어둔 NaN으로 남고,
+  // warning-check의 `>=` 비교는 NaN에 대해 항상 false라 미세먼지 경고만
+  // 조용히 빠진다.
   const [weatherSnapshot, airQualitySnapshot] = await Promise.all([
     getWeatherSnapshot(origin.lat, origin.lon),
-    getAirQualitySnapshot(origin.lat, origin.lon)
+    getAirQualitySnapshot(origin.lat, origin.lon).catch(() => null)
   ]);
 
-  const mergedWeather: WeatherSnapshot = {
-    ...weatherSnapshot,
-    pm10: airQualitySnapshot.pm10,
-    pm25: airQualitySnapshot.pm25
-  };
+  const mergedWeather: WeatherSnapshot = airQualitySnapshot
+    ? {
+        ...weatherSnapshot,
+        pm10: airQualitySnapshot.pm10,
+        pm25: airQualitySnapshot.pm25
+      }
+    : weatherSnapshot;
 
   const warningEvaluation = evaluateWarnings(profile, mergedWeather, now);
   const durationOptions = calculateTargetDuration(profile, warningEvaluation.durationPenaltyRatio);
