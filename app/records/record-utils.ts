@@ -3,6 +3,7 @@ export type LineString = { type: "LineString"; coordinates: Array<[number, numbe
 export type WalkRecord = {
   id: string;
   userId: string;
+  guardianName?: string | null;
   startedAt: string;
   endedAt: string | null;
   distanceMeters: number | null;

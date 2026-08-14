@@ -1,10 +1,9 @@
 "use client";
 
-import { Copy, Pencil, Users } from "lucide-react";
+import { Bell, Copy, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth-context";
 import type { CareTask, CareTodayResponse } from "../lib/types";
-import { Button, Card, CardContent } from "../ui";
 import {
   buildTimes,
   CARE_TITLES,
@@ -21,6 +20,50 @@ import { EditPanel, ManualSection, WalkSection } from "./sharing-sections";
 type RoutineSummary = CareTodayResponse["routines"][number];
 
 type Drafts = Record<SharingCareKind, RoutineDraft>;
+
+const WEEKDAY_LABELS_KO = ["월", "화", "수", "목", "금", "토", "일"];
+
+function toDateKeyLocal(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * FE 디자인의 요일 선택 스트립은 임의의 날짜를 조회하는 백엔드가 없어 그대로 옮길 수 없다.
+ * 대신 실제 이번 주(월~일)를 계산해 "오늘"만 표시하고, 클릭은 받지 않는 장식용 스트립으로 둔다.
+ */
+function buildWeekStrip(todayKey: string | undefined) {
+  const base = todayKey ? new Date(`${todayKey}T00:00:00`) : new Date();
+  const jsDay = base.getDay();
+  const mondayOffset = jsDay === 0 ? -6 : 1 - jsDay;
+  const monday = new Date(base);
+  monday.setDate(base.getDate() + mondayOffset);
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + index);
+    const key = toDateKeyLocal(date);
+
+    return {
+      key,
+      weekday: WEEKDAY_LABELS_KO[index],
+      day: date.getDate(),
+      isToday: todayKey ? key === todayKey : key === toDateKeyLocal(new Date())
+    };
+  });
+}
+
+function formatCareHeaderDate(dateKey: string | undefined) {
+  if (!dateKey) {
+    return "오늘";
+  }
+
+  const date = new Date(`${dateKey}T00:00:00`);
+  const weekday = WEEKDAY_LABELS_KO[(date.getDay() + 6) % 7];
+  return `${date.getMonth() + 1}월 ${date.getDate()}일 ${weekday}요일`;
+}
 
 function makeDraftsFromRoutines(routines: RoutineSummary[]): Drafts {
   const next = defaultDrafts();
@@ -54,6 +97,7 @@ export default function SharingTabPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [updatingTaskId, setUpdatingTaskId] = useState("");
 
   const loadCare = useCallback(async () => {
@@ -108,6 +152,16 @@ export default function SharingTabPage() {
       care.tasks.some((task) => SHARING_CARE_KINDS.includes(task.taskType as SharingCareKind))
     );
   }, [care]);
+
+  const weekStrip = useMemo(() => buildWeekStrip(care?.date), [care?.date]);
+  const todayTaskCount = tasksByKind.feed.length + tasksByKind.medicine.length + tasksByKind.walk.length;
+  const todayDoneCount = useMemo(
+    () =>
+      [...tasksByKind.feed, ...tasksByKind.medicine, ...tasksByKind.walk].filter(
+        (task) => task.status === "completed"
+      ).length,
+    [tasksByKind]
+  );
 
   async function toggleTask(task: CareTask) {
     if (!isManualTask(task)) {
@@ -235,99 +289,164 @@ export default function SharingTabPage() {
   }
 
   return (
-    <main className="mx-auto grid w-full max-w-3xl gap-4 px-4 pb-28 pt-5">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-extrabold text-muted-foreground">{primaryDog.name}</p>
-          <h1 className="text-2xl font-black">셰어링</h1>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setShowInvite((value) => !value)} type="button" variant="outline">
-            <Users size={17} />
-            가족 초대하기
-          </Button>
-          <Button onClick={editing ? () => setEditing(false) : openEditor} type="button" variant="outline">
-            <Pencil size={17} />
-            {editing ? "닫기" : "수정하기"}
-          </Button>
-        </div>
-      </header>
+    <main className="flex min-h-screen w-full justify-center bg-ms-page text-ms-ink">
+      <div className="w-full max-w-[375px] pb-[104px]">
+        <header className="rounded-b-[24px] bg-ms-action-green px-[24px] pb-[18px] pt-[14px] text-ms-on-green">
+          <div className="flex h-[38px] items-center justify-between">
+            <span aria-hidden="true" className="h-[34px] w-[34px]" />
+            <div className="text-center">
+              <p className="text-[11px] font-bold leading-none">{primaryDog.name}</p>
+              <h1 className="mt-[4px] text-[21px] font-extrabold leading-none">셰어링</h1>
+            </div>
+            <div className="relative">
+              <button
+                aria-expanded={isNotificationOpen}
+                aria-label="공유 알림"
+                className="relative grid h-[34px] w-[34px] place-items-center rounded-full bg-ms-action-green-pressed"
+                onClick={() => setIsNotificationOpen((value) => !value)}
+                type="button"
+              >
+                <Bell size={17} strokeWidth={2.3} />
+              </button>
 
-      {notice && (
-        <div className="rounded-md border border-primary/30 bg-green-50 px-4 py-3 text-sm font-black text-primary">
-          {notice}
-        </div>
-      )}
+              {isNotificationOpen ? (
+                <section className="absolute right-0 top-[42px] z-20 w-[240px] rounded-[22px] border border-ms-line bg-ms-card p-[14px] text-ms-ink shadow-sm">
+                  <h2 className="text-[14px] font-extrabold leading-none">공유 알림</h2>
+                  <p className="mt-[10px] text-[12px] font-bold text-ms-muted">아직 새로운 알림이 없어요.</p>
+                </section>
+              ) : null}
+            </div>
+          </div>
 
-      {error && (
-        <div className="rounded-md border border-destructive/30 bg-red-50 px-4 py-3 text-sm font-bold text-destructive">
-          {error}
-        </div>
-      )}
-
-      {showInvite && (
-        <Card>
-          <CardContent className="grid gap-3 pt-4">
+          <div className="mt-[16px] flex items-end justify-between">
             <div>
-              <p className="text-sm font-black">가족 초대 코드</p>
-              <p className="mt-1 text-xs font-bold text-muted-foreground">
-                가족이 회원가입에서 이 코드를 입력하면 {primaryDog.name}의 공동 보호자로 합류해요.
+              <p className="text-[12px] font-bold leading-none">이번 주</p>
+              <p className="mt-[6px] text-[16px] font-extrabold leading-none">
+                {formatCareHeaderDate(care?.date)}
               </p>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted px-4 py-3">
-              <code className="text-lg font-black tracking-wider">{primaryDog.invite_code}</code>
-              <Button disabled={!primaryDog.invite_code} onClick={copyInviteCode} type="button">
-                <Copy size={17} />
-                복사
-              </Button>
+            <span className="rounded-full bg-ms-card px-[10px] py-[6px] text-[11px] font-extrabold text-ms-emphasis-green">
+              오늘 {todayDoneCount}/{todayTaskCount}
+            </span>
+          </div>
+
+          <div className="mt-[13px] grid grid-cols-7 gap-[5px]">
+            {weekStrip.map((day) => (
+              <div
+                className={`h-[46px] rounded-[13px] pt-[7px] text-center ${
+                  day.isToday ? "bg-ms-card text-ms-emphasis-green" : "bg-ms-action-green-pressed text-ms-on-green"
+                }`}
+                key={day.key}
+              >
+                <span className="block text-[10px] font-bold leading-none">{day.weekday}</span>
+                <span className="mt-[5px] block text-[15px] font-extrabold leading-none">{day.day}</span>
+              </div>
+            ))}
+          </div>
+        </header>
+
+        <section className="px-[24px] pt-[20px]">
+          <div className="flex items-center justify-between">
+            <h2 className="text-[15px] font-extrabold leading-none">공동 보호자</h2>
+            <button
+              className="flex items-center gap-[6px] rounded-full bg-ms-sunken px-[12px] py-[7px] text-[12px] font-extrabold text-ms-secondary"
+              onClick={() => setShowInvite((value) => !value)}
+              type="button"
+            >
+              <Users size={14} strokeWidth={2.4} />
+              가족 초대하기
+            </button>
+          </div>
+
+          {showInvite ? (
+            <div className="mt-[12px] rounded-[18px] border border-ms-line bg-ms-card p-[14px]">
+              <p className="text-[12px] font-bold text-ms-muted">
+                가족이 회원가입에서 이 코드를 입력하면 {primaryDog.name}의 공동 보호자로 합류해요.
+              </p>
+              <div className="mt-[10px] flex items-center justify-between gap-[10px] rounded-[14px] bg-ms-sunken px-[14px] py-[10px]">
+                <code className="text-[16px] font-extrabold tracking-wider text-ms-ink">
+                  {primaryDog.invite_code}
+                </code>
+                <button
+                  className="flex items-center gap-[5px] rounded-full bg-ms-brand px-[12px] py-[7px] text-[12px] font-extrabold text-ms-on-brand disabled:opacity-60"
+                  disabled={!primaryDog.invite_code}
+                  onClick={copyInviteCode}
+                  type="button"
+                >
+                  <Copy size={14} strokeWidth={2.4} />
+                  복사
+                </button>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          ) : null}
+        </section>
 
-      {editing && (
-        <EditPanel
-          drafts={drafts}
-          isSaving={isSaving}
-          onCountChange={updateCount}
-          onSave={saveRoutines}
-          onTimeChange={updateTime}
-        />
-      )}
+        {notice ? (
+          <div className="mx-[24px] mt-[14px] rounded-[16px] bg-ms-ok-bg px-[14px] py-[10px] text-[13px] font-bold text-ms-ok-fg">
+            {notice}
+          </div>
+        ) : null}
 
-      {isLoading ? (
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm font-bold text-muted-foreground">오늘 체크리스트를 불러오는 중이에요...</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          {!hasRoutinesOrTasks && (
-            <Card>
-              <CardContent className="pt-4">
-                <p className="text-sm font-black text-muted-foreground">
-                  수정하기로 밥·약 일정을 등록해보세요
-                </p>
-              </CardContent>
-            </Card>
-          )}
+        {error ? (
+          <div className="mx-[24px] mt-[14px] rounded-[16px] bg-ms-warn-bg px-[14px] py-[10px] text-[13px] font-bold text-ms-warn-fg">
+            {error}
+          </div>
+        ) : null}
 
-          <ManualSection
-            kind="feed"
-            onToggle={toggleTask}
-            tasks={tasksByKind.feed}
-            updatingTaskId={updatingTaskId}
-          />
-          <ManualSection
-            kind="medicine"
-            onToggle={toggleTask}
-            tasks={tasksByKind.medicine}
-            updatingTaskId={updatingTaskId}
-          />
-          <WalkSection tasks={tasksByKind.walk} />
-        </>
-      )}
+        <section className="mt-[22px] px-[24px]">
+          <div className="flex items-end justify-between">
+            <div>
+              <p className="text-[13px] font-bold leading-none text-ms-emphasis-green">오늘의 체크리스트</p>
+              <h2 className="mt-[7px] text-[21px] font-extrabold leading-none">{primaryDog.name} 케어 현황</h2>
+            </div>
+            <button
+              aria-expanded={editing}
+              className={`rounded-full px-[10px] py-[6px] text-[12px] font-extrabold ${
+                editing ? "bg-ms-brand text-ms-on-brand" : "bg-ms-sunken text-ms-secondary"
+              }`}
+              onClick={editing ? () => setEditing(false) : openEditor}
+              type="button"
+            >
+              {editing ? "완료" : "수정"}
+            </button>
+          </div>
+
+          <div className="mt-[14px] space-y-[10px]">
+            {editing ? (
+              <EditPanel
+                drafts={drafts}
+                isSaving={isSaving}
+                onCountChange={updateCount}
+                onSave={saveRoutines}
+                onTimeChange={updateTime}
+              />
+            ) : null}
+
+            {isLoading ? (
+              <div className="rounded-[20px] border border-ms-line bg-ms-card p-[16px] text-center text-[13px] font-bold text-ms-muted shadow-sm">
+                오늘 체크리스트를 불러오는 중이에요...
+              </div>
+            ) : (
+              <>
+                {!hasRoutinesOrTasks ? (
+                  <div className="rounded-[20px] border border-ms-line bg-ms-card p-[16px] text-center text-[13px] font-bold text-ms-muted shadow-sm">
+                    수정하기로 밥·약 일정을 등록해보세요
+                  </div>
+                ) : null}
+
+                <ManualSection kind="feed" onToggle={toggleTask} tasks={tasksByKind.feed} updatingTaskId={updatingTaskId} />
+                <ManualSection
+                  kind="medicine"
+                  onToggle={toggleTask}
+                  tasks={tasksByKind.medicine}
+                  updatingTaskId={updatingTaskId}
+                />
+                <WalkSection tasks={tasksByKind.walk} />
+              </>
+            )}
+          </div>
+        </section>
+      </div>
     </main>
   );
 }

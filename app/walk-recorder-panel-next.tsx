@@ -1,14 +1,14 @@
 "use client";
 
 import {
+  Clock3,
+  Gauge,
+  MapPin,
   Pause,
   Play,
-  RotateCcw,
+  Route,
   Save,
-  Square,
-  Star,
-  Timer,
-  Waypoints
+  Square
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -18,7 +18,7 @@ import {
   type WalkRecordRecommendedCourse,
   type WalkRecordRouteGeoJson
 } from "./walkTracking";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "./ui";
+import { Button, Input } from "./ui";
 import { WalkActiveRouteMap } from "./walk-active-route-map";
 
 type WalkRecorderPanelProps = {
@@ -29,6 +29,7 @@ type WalkRecorderPanelProps = {
   selectedCourse: {
     rank: number;
     direction: string;
+    courseName?: string;
     distanceMeters: number;
     durationMinutes: number;
     score: number;
@@ -45,6 +46,7 @@ type WalkRecorderPanelProps = {
         preferenceAdjustment?: number;
       }>;
     };
+    cautions?: string[];
     facts?: Record<string, unknown>;
     path?: WalkRecordRouteGeoJson;
   } | null;
@@ -70,6 +72,20 @@ function formatDistance(meters: number) {
   return meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(2)} km`;
 }
 
+function formatKilometers(meters: number) {
+  return (meters / 1000).toFixed(2);
+}
+
+function formatAverageSpeed(distanceMeters: number, elapsedSeconds: number) {
+  if (elapsedSeconds <= 0) {
+    return "--";
+  }
+
+  const metersPerSecond = distanceMeters / elapsedSeconds;
+  const kilometersPerHour = metersPerSecond * 3.6;
+  return `${kilometersPerHour.toFixed(1)} km/h`;
+}
+
 function coursePathToPolyline(course: WalkRecorderPanelProps["selectedCourse"]): WalkPolylinePoint[] {
   return (
     course?.path?.coordinates.map(([longitude, latitude]) => ({
@@ -89,11 +105,13 @@ function selectedCourseToRecommendedCourse(
   return {
     rank: course.rank,
     direction: course.direction,
+    courseName: course.courseName,
     distanceMeters: course.distanceMeters,
     durationMinutes: course.durationMinutes,
     score: course.score,
     aiExplanation: course.aiExplanation,
     explanation: course.explanation,
+    cautions: course.cautions,
     facts: course.facts,
     path: course.path ?? { type: "LineString", coordinates: [] }
   };
@@ -135,6 +153,7 @@ export function WalkRecorderPanel({
   const isRunning = walk.state.status === "running";
   const isPaused = walk.state.status === "paused";
   const canFinish = isRunning || isPaused;
+  const averageSpeedLabel = formatAverageSpeed(walk.distanceMeters, walk.elapsedSeconds);
 
   useEffect(() => {
     onWalkStatusChange?.(isReviewing ? "review" : canFinish ? "active" : "idle");
@@ -204,255 +223,263 @@ export function WalkRecorderPanel({
     walk.reset();
   }
 
+  const statusMessage = walk.state.lastError || walk.serverError || panelMessage;
+  const statusIsError = Boolean(walk.state.lastError || walk.serverError);
+
+  function StatusBanner() {
+    if (!statusMessage) {
+      return null;
+    }
+
+    return (
+      <div
+        className={`mt-[14px] rounded-[14px] px-[14px] py-[12px] text-[13px] font-bold ${
+          statusIsError ? "bg-ms-warn-bg text-ms-warn-fg" : "bg-ms-ok-bg text-ms-ok-fg"
+        }`}
+      >
+        {statusMessage}
+      </div>
+    );
+  }
+
+  // 리뷰 화면: meoksa_FE 에는 대응하는 시안이 없어서, 코스 카드/입력 필드 시각
+  // 언어(rounded-[18px], ms-card, ms-line, ms-brand 버튼)를 그대로 가져와 짰다.
   if (isReviewing) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between gap-2">
-            <span>{dogName} 산책 리뷰</span>
-            <span className="rounded-full bg-muted px-2 py-1 text-xs font-black text-muted-foreground">review</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <section className="px-[24px] pb-[120px] pt-[10px]">
+        <p className="text-[12px] font-bold leading-none text-ms-emphasis-green">Review</p>
+        <h1 className="mt-[8px] text-[22px] font-extrabold leading-none">{dogName} 산책 리뷰</h1>
+
+        <div className="mt-[16px] overflow-hidden rounded-[18px] border border-ms-line shadow-sm">
           <WalkActiveRouteMap
             appKey={kakaoMapAppKey}
             caption="방금 걸은 GPS 이동 경로예요."
             fallbackCenter={mapFallbackCenter}
             points={previewPoints}
           />
+        </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div className="flex min-h-12 items-center gap-2 rounded-md bg-muted px-3 text-sm font-black">
-              <Timer size={17} /> {formatDuration(walk.elapsedSeconds)}
+        <div className="mt-[14px] grid grid-cols-3 gap-[12px]">
+          <article className="rounded-[18px] border border-ms-line bg-ms-card px-[16px] py-[14px] shadow-sm">
+            <Clock3 className="text-ms-emphasis" size={20} />
+            <p className="mt-[14px] text-[12px] font-bold text-ms-muted">시간</p>
+            <p className="mt-[5px] text-[22px] font-extrabold">{formatDuration(walk.elapsedSeconds)}</p>
+          </article>
+          <article className="rounded-[18px] border border-ms-line bg-ms-card px-[16px] py-[14px] shadow-sm">
+            <Route className="text-ms-walk-minimum" size={20} />
+            <p className="mt-[14px] text-[12px] font-bold text-ms-muted">거리</p>
+            <p className="mt-[5px] text-[22px] font-extrabold">{formatDistance(walk.distanceMeters)}</p>
+          </article>
+          <article className="rounded-[18px] border border-ms-line bg-ms-card px-[16px] py-[14px] shadow-sm">
+            <Gauge className="text-ms-emphasis-green" size={20} />
+            <p className="mt-[14px] text-[12px] font-bold text-ms-muted">평균 속도</p>
+            <p className="mt-[5px] text-[22px] font-extrabold">{averageSpeedLabel}</p>
+          </article>
+        </div>
+
+        {reviewFactors.length > 0 && (
+          <div className="mt-[14px] grid gap-[10px] rounded-[18px] border border-ms-line bg-ms-card p-[16px] shadow-sm">
+            <span className="text-[12px] font-bold text-ms-muted">추천 판단 근거 피드백</span>
+            <div className="grid gap-[10px] sm:grid-cols-2">
+              <label className="grid gap-[4px] text-xs font-bold text-ms-secondary">
+                좋았던 판단 근거
+                <select
+                  className="h-10 rounded-2xl border border-ms-line bg-ms-card px-2.5 text-sm font-semibold text-ms-ink outline-none focus:border-ms-brand"
+                  value={likedFactor}
+                  onChange={(event) => setLikedFactor(event.target.value)}
+                >
+                  <option value="">선택 안 함</option>
+                  {reviewFactors.map((factor) => (
+                    <option key={`liked-${factor.key}`} value={factor.key}>
+                      {factor.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-[4px] text-xs font-bold text-ms-secondary">
+                아쉬웠던 판단 근거
+                <select
+                  className="h-10 rounded-2xl border border-ms-line bg-ms-card px-2.5 text-sm font-semibold text-ms-ink outline-none focus:border-ms-brand"
+                  value={dislikedFactor}
+                  onChange={(event) => setDislikedFactor(event.target.value)}
+                >
+                  <option value="">선택 안 함</option>
+                  {reviewFactors.map((factor) => (
+                    <option key={`disliked-${factor.key}`} value={factor.key}>
+                      {factor.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
-            <div className="flex min-h-12 items-center gap-2 rounded-md bg-muted px-3 text-sm font-black">
-              <Waypoints size={17} /> {formatDistance(walk.distanceMeters)}
-            </div>
-          </div>
-
-          {reviewFactors.length > 0 && (
-            <div className="grid gap-3 rounded-md border border-border bg-muted p-3 text-sm font-bold">
-              <span className="text-muted-foreground">추천 판단 근거 피드백</span>
-              <div className="grid gap-2 sm:grid-cols-2">
-                <label className="grid gap-1">
-                  좋았던 판단 근거
-                  <select
-                    className="min-h-12 rounded-md border border-input bg-background px-3 text-sm font-bold"
-                    value={likedFactor}
-                    onChange={(event) => setLikedFactor(event.target.value)}
-                  >
-                    <option value="">선택 안 함</option>
-                    {reviewFactors.map((factor) => (
-                      <option key={`liked-${factor.key}`} value={factor.key}>
-                        {factor.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="grid gap-1">
-                  아쉬웠던 판단 근거
-                  <select
-                    className="min-h-12 rounded-md border border-input bg-background px-3 text-sm font-bold"
-                    value={dislikedFactor}
-                    onChange={(event) => setDislikedFactor(event.target.value)}
-                  >
-                    <option value="">선택 안 함</option>
-                    {reviewFactors.map((factor) => (
-                      <option key={`disliked-${factor.key}`} value={factor.key}>
-                        {factor.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </div>
-          )}
-
-          <div className="grid gap-3 sm:grid-cols-[120px_1fr_1fr]">
-            <label className="grid gap-1 text-sm font-bold">
-              별점
-              <Input max={5} min={1} type="number" value={rating} onChange={(event) => setRating(Number(event.target.value))} />
-            </label>
-            <label className="grid gap-1 text-sm font-bold">
-              좋았던 점
-              <Input value={likedNotes} onChange={(event) => setLikedNotes(event.target.value)} placeholder="좋았던 길이나 컨디션" />
-            </label>
-            <label className="grid gap-1 text-sm font-bold">
-              아쉬웠던 점
-              <Input value={dislikedNotes} onChange={(event) => setDislikedNotes(event.target.value)} placeholder="불편했던 구간이나 특이사항" />
-            </label>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Button disabled={walk.isSaving} type="button" variant="outline" onClick={handleSkipReview}>
-              나중에
-            </Button>
-            <Button disabled={walk.isSaving} type="button" onClick={handleSaveReview}>
-              <Save size={17} /> 리뷰 저장
-            </Button>
-          </div>
-
-          {(walk.state.lastError || walk.serverError || panelMessage) && (
-            <div
-              className={`rounded-md border p-3 text-sm font-bold ${
-                walk.state.lastError || walk.serverError
-                  ? "border-destructive/30 bg-red-50 text-destructive"
-                  : "border-primary/20 bg-green-50 text-primary"
-              }`}
-            >
-              {walk.state.lastError || walk.serverError || panelMessage}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (canFinish) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between gap-2">
-            <span>{dogName} 산책 중</span>
-            <span className="rounded-full bg-muted px-2 py-1 text-xs font-black text-muted-foreground">{walk.state.status}</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {selectedCourse && (
-            <div className="grid gap-1 rounded-md border border-border bg-green-50 p-3 text-sm font-bold text-primary">
-              <span>선택한 추천 코스</span>
-              <strong>
-                {selectedCourse.rank}순위 / {selectedCourse.direction} / {formatDistance(selectedCourse.distanceMeters)} / {selectedCourse.durationMinutes}분
-              </strong>
-            </div>
-          )}
-
-          <WalkActiveRouteMap
-            appKey={kakaoMapAppKey}
-            caption={mapCaption}
-            fallbackCenter={mapFallbackCenter}
-            points={previewPoints}
-          />
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="flex min-h-12 items-center gap-2 rounded-md bg-muted px-3 text-sm font-black">
-              <Timer size={17} /> {formatDuration(walk.elapsedSeconds)}
-            </div>
-            <div className="flex min-h-12 items-center gap-2 rounded-md bg-muted px-3 text-sm font-black">
-              <Waypoints size={17} /> {formatDistance(walk.distanceMeters)}
-            </div>
-          </div>
-
-          <div className="grid gap-2 sm:grid-cols-3">
-            <Button disabled={!isRunning} type="button" variant="outline" onClick={walk.pause}>
-              <Pause size={17} /> 일시정지
-            </Button>
-            <Button disabled={!isPaused} type="button" variant="outline" onClick={walk.resume}>
-              <Play size={17} /> 재개
-            </Button>
-            <Button type="button" onClick={handleFinish}>
-              <Square size={17} /> 종료
-            </Button>
-          </div>
-
-          {(walk.state.lastError || walk.serverError || panelMessage) && (
-            <div
-              className={`rounded-md border p-3 text-sm font-bold ${
-                walk.state.lastError || walk.serverError
-                  ? "border-destructive/30 bg-red-50 text-destructive"
-                  : "border-primary/20 bg-green-50 text-primary"
-              }`}
-            >
-              {walk.state.lastError || walk.serverError || panelMessage}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center justify-between gap-2">
-          <span>{dogName} 산책 기록</span>
-          <span className="rounded-full bg-muted px-2 py-1 text-xs font-black text-muted-foreground">{walk.state.status}</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        {selectedCourse && (
-          <div className="grid gap-1 rounded-md border border-border bg-green-50 p-3 text-sm font-bold text-primary">
-            <span>선택한 추천 코스</span>
-            <strong>
-              {selectedCourse.rank}순위 / {selectedCourse.direction} / {formatDistance(selectedCourse.distanceMeters)} / {selectedCourse.durationMinutes}분
-            </strong>
           </div>
         )}
 
-        <WalkActiveRouteMap
-          appKey={kakaoMapAppKey}
-          caption={mapCaption}
-          fallbackCenter={mapFallbackCenter}
-          points={previewPoints}
-        />
-
-        <div className="grid grid-cols-3 gap-2">
-          <div className="flex min-h-12 items-center gap-2 rounded-md bg-muted px-3 text-sm font-black">
-            <Timer size={17} /> {formatDuration(walk.elapsedSeconds)}
-          </div>
-          <div className="flex min-h-12 items-center gap-2 rounded-md bg-muted px-3 text-sm font-black">
-            <Waypoints size={17} /> {formatDistance(walk.distanceMeters)}
-          </div>
-          <div className="flex min-h-12 items-center gap-2 rounded-md bg-muted px-3 text-sm font-black">
-            <Star size={17} /> {rating} / 5
-          </div>
-        </div>
-
-        <div className="grid gap-2 sm:grid-cols-5">
-          <Button disabled={walk.isSaving || isRunning} type="button" onClick={handleStart}>
-            <Play size={17} /> 시작
-          </Button>
-          <Button disabled={!isRunning} type="button" variant="outline" onClick={walk.pause}>
-            <Pause size={17} /> 일시정지
-          </Button>
-          <Button disabled={!isPaused} type="button" variant="outline" onClick={walk.resume}>
-            <Play size={17} /> 재개
-          </Button>
-          <Button disabled={walk.isSaving || !canFinish} type="button" onClick={handleFinish}>
-            <Square size={17} /> 종료 저장
-          </Button>
-          <Button type="button" variant="outline" onClick={walk.reset}>
-            <RotateCcw size={17} /> 초기화
-          </Button>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-[120px_1fr_1fr]">
-          <label className="grid gap-1 text-sm font-bold">
-            별점
+        <div className="mt-[14px] grid gap-[10px] rounded-[18px] border border-ms-line bg-ms-card p-[16px] shadow-sm">
+          <label className="grid gap-[6px] text-[12px] font-bold text-ms-secondary">
+            별점 (1~5)
             <Input max={5} min={1} type="number" value={rating} onChange={(event) => setRating(Number(event.target.value))} />
           </label>
-          <label className="grid gap-1 text-sm font-bold">
+          <label className="grid gap-[6px] text-[12px] font-bold text-ms-secondary">
             좋았던 점
             <Input value={likedNotes} onChange={(event) => setLikedNotes(event.target.value)} placeholder="좋았던 길이나 컨디션" />
           </label>
-          <label className="grid gap-1 text-sm font-bold">
+          <label className="grid gap-[6px] text-[12px] font-bold text-ms-secondary">
             아쉬웠던 점
             <Input value={dislikedNotes} onChange={(event) => setDislikedNotes(event.target.value)} placeholder="불편했던 구간이나 특이사항" />
           </label>
         </div>
 
-        {(walk.state.lastError || walk.serverError || panelMessage) && (
-          <div
-            className={`rounded-md border p-3 text-sm font-bold ${
-              walk.state.lastError || walk.serverError
-                ? "border-destructive/30 bg-red-50 text-destructive"
-                : "border-primary/20 bg-green-50 text-primary"
-            }`}
-          >
-            {walk.state.lastError || walk.serverError || panelMessage}
+        <div className="mt-[14px] grid grid-cols-2 gap-[10px]">
+          <Button disabled={walk.isSaving} type="button" variant="outline" onClick={handleSkipReview}>
+            나중에
+          </Button>
+          <Button disabled={walk.isSaving} type="button" onClick={handleSaveReview}>
+            <Save size={17} /> 리뷰 저장
+          </Button>
+        </div>
+
+        <StatusBanner />
+      </section>
+    );
+  }
+
+  // 산책 중 화면: meoksa_FE "Walking now" 시안 그대로 — 큰 거리 숫자, 시간/거리
+  // 2열 카드, 알약 모양 일시정지·종료 버튼. 실시간 GPS 지도는 이 화면 상단에
+  // 붙여 FE 의 MapPreview 자리를 대신한다.
+  if (canFinish) {
+    return (
+      <>
+        <section className="relative overflow-hidden bg-ms-sunken">
+          <div className="pointer-events-none absolute left-[16px] top-[16px] z-10 flex h-[36px] items-center gap-[8px] rounded-full bg-ms-card px-[14px] text-[13px] font-bold text-ms-ink shadow-sm">
+            <MapPin className="text-ms-emphasis-green" size={17} />
+            {selectedCourse ? `${selectedCourse.direction} 코스` : "자유 산책"}
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <WalkActiveRouteMap appKey={kakaoMapAppKey} caption={mapCaption} fallbackCenter={mapFallbackCenter} points={previewPoints} />
+        </section>
+
+        <section className="relative z-0 -mt-[20px] rounded-t-[32px] bg-ms-page px-[24px] pt-[24px] pb-[120px]">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[13px] font-bold leading-none text-ms-emphasis">Walking now</p>
+              <h1 className="mt-[9px] text-[22px] font-extrabold leading-none">{dogName} 산책 중</h1>
+            </div>
+            <span
+              className={`rounded-full px-[12px] py-[8px] text-[12px] font-extrabold ${
+                isPaused ? "bg-ms-warn-bg text-ms-warn-fg" : "bg-ms-sunken text-ms-emphasis"
+              }`}
+            >
+              {isPaused ? "일시정지" : "진행 중"}
+            </span>
+          </div>
+
+          <div className="mt-[25px] text-center">
+            <p className="text-[13px] font-bold uppercase tracking-[0.2em] text-ms-muted">Kilometers</p>
+            <p className="mt-[6px] text-[72px] font-black leading-none tracking-normal">
+              {formatKilometers(walk.distanceMeters)}
+            </p>
+          </div>
+
+          {/* 칼로리 카드는 뺐다 — 산책 중엔 거리(위 큰 숫자)와 시간, 목표,
+              평균 속도만 보여준다 (meoksa_FE 규칙) */}
+          <div className="mt-[28px] grid grid-cols-3 gap-[12px]">
+            <article className="rounded-[18px] border border-ms-line bg-ms-card px-[16px] py-[14px] shadow-sm">
+              <Clock3 className="text-ms-emphasis" size={20} />
+              <p className="mt-[14px] text-[12px] font-bold text-ms-muted">시간</p>
+              <p className="mt-[5px] text-[22px] font-extrabold">{formatDuration(walk.elapsedSeconds)}</p>
+            </article>
+            <article className="rounded-[18px] border border-ms-line bg-ms-card px-[16px] py-[14px] shadow-sm">
+              <Route className="text-ms-walk-minimum" size={20} />
+              <p className="mt-[14px] text-[12px] font-bold text-ms-muted">목표</p>
+              <p className="mt-[5px] text-[22px] font-extrabold">
+                {selectedCourse ? `${selectedCourse.durationMinutes}분` : "자유"}
+              </p>
+            </article>
+            <article className="rounded-[18px] border border-ms-line bg-ms-card px-[16px] py-[14px] shadow-sm">
+              <Gauge className="text-ms-emphasis-green" size={20} />
+              <p className="mt-[14px] text-[12px] font-bold text-ms-muted">평균 속도</p>
+              <p className="mt-[5px] text-[22px] font-extrabold">{averageSpeedLabel}</p>
+            </article>
+          </div>
+
+          {selectedCourse && (
+            <div className="mt-[14px] rounded-[18px] border border-ms-line bg-ms-card px-[16px] py-[13px] text-[12px] font-bold text-ms-secondary shadow-sm">
+              선택한 추천 코스 · {selectedCourse.rank}순위 · {selectedCourse.direction} · {formatDistance(selectedCourse.distanceMeters)}
+            </div>
+          )}
+
+          {/* 아이콘만 있는 원형 버튼은 뭔지 안 읽혀서 못 찾겠다는 피드백이 있었다.
+              글씨를 붙인 알약 버튼으로 바꾼다 (meoksa_FE 규칙) */}
+          <div className="mt-[28px] flex items-center justify-center gap-[12px]">
+            <button
+              className="flex h-[56px] flex-1 items-center justify-center gap-[8px] rounded-full border border-ms-line bg-ms-card text-[15px] font-extrabold text-ms-emphasis shadow-sm active:bg-ms-sunken"
+              onClick={isPaused ? walk.resume : walk.pause}
+              type="button"
+            >
+              {isPaused ? <Play fill="currentColor" size={18} /> : <Pause fill="currentColor" size={18} />}
+              {isPaused ? "다시 시작" : "일시정지"}
+            </button>
+            <button
+              className="flex h-[56px] flex-1 items-center justify-center gap-[8px] rounded-full bg-ms-ink text-[15px] font-extrabold text-ms-on-dark shadow-sm disabled:opacity-60"
+              disabled={walk.isSaving}
+              onClick={handleFinish}
+              type="button"
+            >
+              <Square fill="currentColor" size={16} />
+              산책 끝내기
+            </button>
+          </div>
+
+          <StatusBanner />
+        </section>
+      </>
+    );
+  }
+
+  // 산책 시작 전 화면: 위쪽(walk-tab)의 시간 선택/코스 목록에 이어서, 선택한
+  // 코스 요약과 "이 경로로 산책 시작하기" CTA만 보여준다 — meoksa_FE 의
+  // 하단 요약 카드 + 알약 버튼 자리 그대로.
+  return (
+    <section className="px-[24px] pb-[120px]">
+      {selectedCourse && (
+        <div className="mt-[14px] rounded-[18px] border border-ms-line bg-ms-card px-[16px] py-[13px] shadow-sm">
+          <p className="text-[12px] font-bold text-ms-secondary">선택한 추천 코스</p>
+          <p className="mt-[4px] text-[14px] font-extrabold text-ms-ink">
+            {selectedCourse.rank}순위 · {selectedCourse.direction}
+          </p>
+        </div>
+      )}
+
+      <div className="mt-[14px] grid grid-cols-3 rounded-[18px] border border-ms-line bg-ms-card px-[18px] py-[13px] shadow-sm">
+        <div>
+          <p className="text-[11px] font-bold text-ms-muted">거리</p>
+          <p className="mt-[6px] text-[18px] font-extrabold">
+            {selectedCourse ? formatDistance(selectedCourse.distanceMeters) : "자유"}
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] font-bold text-ms-muted">시간</p>
+          <p className="mt-[6px] text-[18px] font-extrabold">
+            {selectedCourse ? `${selectedCourse.durationMinutes}분` : "--"}
+          </p>
+        </div>
+        <div>
+          <p className="text-[11px] font-bold text-ms-muted">점수</p>
+          <p className="mt-[6px] text-[18px] font-extrabold">{selectedCourse ? `${selectedCourse.score}점` : "--"}</p>
+        </div>
+      </div>
+
+      <button
+        className="mt-[12px] flex h-[56px] w-full items-center justify-center gap-[10px] rounded-full bg-ms-action-green text-[15px] font-extrabold text-ms-on-green shadow-sm active:bg-ms-action-green-pressed disabled:opacity-60"
+        disabled={walk.isSaving || isRunning}
+        onClick={handleStart}
+        type="button"
+      >
+        <Play fill="currentColor" size={19} />
+        이 경로로 산책 시작하기
+      </button>
+
+      <StatusBanner />
+    </section>
   );
 }

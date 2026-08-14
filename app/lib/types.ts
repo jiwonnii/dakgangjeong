@@ -71,6 +71,7 @@ export type CareTask = {
   status: "pending" | "completed" | "skipped";
   completedAt: string | null;
   completedBy: string | null;
+  guardianName?: string | null;
   note: string | null;
 };
 
@@ -89,6 +90,12 @@ export type CareTodayResponse = {
 export type RecommendedCourse = {
   rank: number;
   direction: string;
+  /** Short feature-based display name (max 8 Korean characters), e.g.
+   * "공원 많은 길" — replaces the compass-direction display in
+   * course-results.tsx. Populated by addAiExplanationsToCourses alongside
+   * aiExplanation; `direction` is kept for the underlying bearing-bin data,
+   * not removed. */
+  courseName?: string;
   distanceMeters: number;
   durationMinutes: number;
   score: number;
@@ -105,6 +112,10 @@ export type RecommendedCourse = {
       preferenceAdjustment?: number;
     }>;
   };
+  /** Short, concrete practical cautions for this course (risk zones,
+   * vehicle exposure, stairs, etc.) — shown under "이 코스 산책 시
+   * 고려사항" in course-results.tsx instead of the raw score breakdown. */
+  cautions?: string[];
   preferenceInsight?: string | null;
   facts: {
     riskZoneCount: number;

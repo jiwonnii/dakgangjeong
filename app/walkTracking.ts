@@ -173,6 +173,8 @@ export type WalkRecordRouteGeoJson = {
 export type WalkRecordRecommendedCourse = {
   rank: number;
   direction?: string;
+  /** Change 7: short feature-based display name (max 8 Korean chars). */
+  courseName?: string;
   distanceMeters: number;
   durationMinutes: number;
   score?: number;
@@ -189,6 +191,8 @@ export type WalkRecordRecommendedCourse = {
       preferenceAdjustment?: number;
     }>;
   };
+  /** Change 2/8: plain-language practical cautions for this course. */
+  cautions?: string[];
   facts?: Record<string, unknown>;
   path: WalkRecordRouteGeoJson;
 };
