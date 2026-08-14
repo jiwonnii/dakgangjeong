@@ -4,6 +4,8 @@ type WalkSummaryInput = {
   rating?: number;
   likedNotes?: string;
   dislikedNotes?: string;
+  likedFactor?: string;
+  dislikedFactor?: string;
   pointCount?: number;
   isManual?: boolean;
 };
@@ -25,8 +27,10 @@ export function createWalkRecordSummary(input: WalkSummaryInput) {
   const review = input.rating ? ` 별점은 ${input.rating}점이에요.` : "";
   const liked = input.likedNotes ? ` 좋았던 점: ${input.likedNotes}` : "";
   const disliked = input.dislikedNotes ? ` 아쉬웠던 점: ${input.dislikedNotes}` : "";
+  const likedFactor = input.likedFactor ? ` Good factor: ${input.likedFactor}.` : "";
+  const dislikedFactor = input.dislikedFactor ? ` Needs work: ${input.dislikedFactor}.` : "";
 
   return `${mode}이에요. ${formatMinutes(input.durationSeconds)} 동안 ${formatDistance(
     input.distanceMeters
-  )}를 걸었어요.${routeQuality}${review}${liked}${disliked}`.trim();
+  )}를 걸었어요.${routeQuality}${review}${liked}${disliked}${likedFactor}${dislikedFactor}`.trim();
 }

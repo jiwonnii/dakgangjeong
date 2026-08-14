@@ -1,18 +1,8 @@
+@import "./tokens.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-:root {
-  --background: 144 20% 96%;
-  --foreground: 150 17% 11%;
-  --muted: 138 18% 92%;
-  --muted-foreground: 151 11% 39%;
-  --border: 139 19% 86%;
-  --primary: 151 43% 31%;
-  --primary-foreground: 0 0% 100%;
-  --destructive: 10 64% 43%;
-  --destructive-foreground: 0 0% 100%;
-}
 
 * {
   box-sizing: border-box;
@@ -21,8 +11,8 @@
 body {
   min-width: 320px;
   margin: 0;
-  background: hsl(var(--background));
-  color: hsl(var(--foreground));
+  background: var(--surface-page);
+  color: var(--text-primary);
 }
 
 button,
@@ -35,4 +25,34 @@ textarea {
 .kakao-map-root {
   width: 100%;
   height: 340px;
+}
+
+/* 로딩 화면. 발자국이 한 걸음씩 찍히고 앞쪽부터 옅어진다 (meoksa_FE 이식) */
+@keyframes paw-step {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.86);
+  }
+  14% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  68% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes paw-step {
+    0%,
+    100% {
+      opacity: 1;
+      transform: none;
+    }
+  }
 }

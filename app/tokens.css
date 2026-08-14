@@ -1,0 +1,134 @@
+/* ==========================================================================
+   Meoksa — 컬러 토큰
+   출처: meoksa_FE/src/tokens.css (Gentler Streak 레퍼런스에서 추출한 팔레트)
+   BE/FE 병합 작업의 일부로 그대로 이식. 원본 주석/구조를 유지한다.
+   ========================================================================== */
+
+:root {
+  /* ---- 1. 프리미티브 ---------------------------------------------------- */
+
+  --p-orange-500: #fa7d38;
+  --p-orange-600: #ef7532;
+
+  --p-green-400: #2ad38e;
+  --p-green-500: #25c685;
+  --p-green-600: #2fb47c;
+  --p-green-700: #3ea880;
+  --p-green-650-pressed: #268f63;
+  --p-forest-700: #1b7a4d;
+
+  --p-periwinkle-400: #6d8df5;
+  --p-periwinkle-300: #93aaf8;
+
+  --p-ember-100: #feedbf;
+  --p-ember-300: #ffbb00;
+  --p-ember-500: #fa8f2f;
+  --p-ember-600: #e0583e;
+  --p-ember-700: #c84600;
+
+  --p-night-900: #15001f;
+  --p-night-800: #301248;
+
+  --p-white: #ffffff;
+  --p-gray-25: #fdfdfd;
+  --p-gray-50: #f3f2f8;
+  --p-gray-100: #ecebf0;
+  --p-ink: #0c0c0c;
+
+  --p-mint-50: #e8f7ee;
+
+  --p-mint-100: #d5f2de;
+  --p-rose-100: #fcd8dc;
+  --p-rose-500: #e24651;
+  --p-red-500: #fe3847;
+
+  /* ---- 2. 시맨틱 -------------------------------------------------------- */
+
+  --surface-page: var(--p-gray-50);
+  --surface-card: var(--p-white);
+  --surface-sunken: var(--p-gray-100);
+  --surface-divider-area: var(--p-gray-100);
+
+  --surface-sky-top: var(--p-periwinkle-400);
+  --surface-sky-bottom: var(--p-periwinkle-300);
+
+  --surface-weather: var(--p-mint-50);
+  --action-green: var(--p-green-600);
+  --action-green-pressed: var(--p-green-650-pressed);
+  --text-on-green: var(--p-ink);
+
+  --walk-minimum: var(--p-periwinkle-400);
+  --walk-optimal: var(--p-green-500);
+  --walk-free: var(--brand);
+
+  --text-primary: var(--p-ink);
+  --text-secondary: #5f5f66;
+  --text-muted: #747078;
+  --text-emphasis: var(--p-ember-700);
+  --text-emphasis-green: var(--p-forest-700);
+
+  --text-on-brand: var(--p-ink);
+  --text-on-sky: var(--p-ink);
+  --text-on-dark: var(--p-white);
+
+  --border: rgba(12, 12, 12, 0.08);
+  --border-strong: rgba(12, 12, 12, 0.16);
+
+  --brand: var(--p-orange-500);
+  --brand-pressed: var(--p-orange-600);
+
+  --map-route: var(--p-orange-500);
+  --map-route-casing: var(--p-white);
+  --map-marker: var(--p-orange-600);
+
+  --band-fill-top: var(--p-green-600);
+  --band-fill-bottom: var(--p-green-400);
+  --band-fill-solid: var(--p-green-500);
+  --band-line: var(--p-ink);
+  --band-point: var(--p-white);
+
+  --glow-bg: var(--p-ember-100);
+  --glow-core: var(--p-ember-300);
+  --glow-mid: var(--p-ember-500);
+  --glow-edge: var(--p-ember-600);
+  --glow-value: var(--p-ember-700);
+
+  --status-ok-bg: var(--p-mint-100);
+  --status-ok-fg: #1c6b45;
+  --status-warn-bg: var(--p-rose-100);
+  --status-warn-fg: #9e2530;
+  --status-alert: var(--p-rose-500);
+  --status-heart: var(--p-red-500);
+}
+
+/* 앱은 라이트 고정입니다. 시스템 다크모드를 따라가지 않습니다. */
+:root[data-theme='dark'] {
+  --surface-page: var(--p-night-900);
+  --surface-card: #1e0a2b;
+  --surface-sunken: var(--p-night-800);
+  --surface-divider-area: #241033;
+
+  --text-primary: #f4f1f7;
+  --text-secondary: #b5aac0;
+  --text-muted: #857a91;
+  --text-emphasis: var(--p-ember-300);
+  --text-on-brand: var(--p-ink);
+
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.2);
+
+  --band-fill-solid: var(--p-green-700);
+  --band-line: #f4f1f7;
+  --band-point: var(--p-night-900);
+
+  --glow-bg: var(--p-night-800);
+  --glow-value: var(--p-ember-300);
+
+  --surface-weather: #12291d;
+  --text-on-green: var(--p-ink);
+
+  --status-ok-bg: #12362a;
+  --status-ok-fg: var(--p-green-400);
+  --status-warn-bg: #3d1a20;
+  --status-warn-fg: #f5a3aa;
+}
