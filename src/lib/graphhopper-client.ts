@@ -3,19 +3,16 @@
  * endpoint, used with `algorithm=round_trip` and a per-request custom
  * model (spec 5.4).
  *
- * VERIFICATION CAVEAT: this project has not made a live call against a
- * running GraphHopper instance (none was available while writing this).
- * The request/response shapes below follow GraphHopper's documented
- * conventions as researched during spec design:
- *   - POST body mirrors the GET query parameter names, including the
- *     dotted `round_trip.*` and `ch.disable` keys, as plain JSON keys.
- *   - `points` and response `points` coordinates are `[lon, lat]`
- *     (GeoJSON order), consistent with `points_encoded=false`.
- *   - Custom models require `ch.disable: true` (5.4 제약 1) and only work
- *     via POST (5.4 제약 2).
- * Cross-check these against a real instance's response before relying on
- * this in production — see the round-6 report for exactly what to verify
- * first.
+ * 실측 확인 (GraphHopper 클라우드 API, 무료 플랜):
+ *   - POST body가 GET 쿼리 파라미터 이름을 그대로 쓰는 것, 즉 dotted
+ *     `round_trip.*` 키를 평범한 JSON 키로 보내는 방식이 동작한다.
+ *   - `points`와 응답 `points` 좌표는 `[lon, lat]` (GeoJSON 순서)이고
+ *     `points_encoded=false`와 일관된다.
+ *   - `algorithm=round_trip`과 `custom_model` 모두 무료 플랜에서 적용된다
+ *     (custom model을 바꾸면 반환 경로가 실제로 달라지는 것으로 확인).
+ *   - 단 `ch.disable: true`를 함께 보내면 무료 플랜에서 400
+ *     "Free packages cannot use flexible mode"로 거절된다. 셀프호스팅에서는
+ *     반대로 custom model에 이 플래그가 필요하다 — buildRequestBody 참고.
  */
 
 import { AppError } from "./app-error";
@@ -84,19 +81,29 @@ type RawGraphHopperResponse = {
 };
 
 function buildRequestBody(request: RoundTripRequest): Record<string, unknown> {
-  return {
+  const body: Record<string, unknown> = {
     points: [[request.origin.lon, request.origin.lat]],
     profile: request.profile,
     algorithm: "round_trip",
     "round_trip.distance": request.distanceMeters,
     "round_trip.seed": request.seed,
     heading: [request.headingDegrees],
-    "ch.disable": true,
     "custom_model": request.customModel,
     points_encoded: false,
     instructions: false,
     elevation: false
   };
+
+  // 셀프호스팅에서는 custom model을 쓰려면 CH를 꺼야 한다(5.4 제약 1). 반면
+  // GraphHopper 클라우드 API는 같은 플래그를 flexible mode 요청으로 보고
+  // 무료 플랜에서 400 "Free packages cannot use flexible mode"로 거절한다.
+  // 클라우드에서도 custom model과 round_trip은 이 플래그 없이 적용된다(실측
+  // 확인). API key 유무로 두 환경을 구분한다.
+  if (!env.GRAPHHOPPER_API_KEY) {
+    body["ch.disable"] = true;
+  }
+
+  return body;
 }
 
 function buildRouteUrl(): string {
