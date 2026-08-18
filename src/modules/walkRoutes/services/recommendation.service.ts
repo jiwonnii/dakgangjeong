@@ -40,7 +40,8 @@ import {
   EVENING_OR_NIGHT_END_HOUR,
   EVENING_OR_NIGHT_START_HOUR,
   MORNING_END_HOUR,
-  RECOMMENDATION_CACHE_TTL_SECONDS
+  RECOMMENDATION_CACHE_TTL_SECONDS,
+  VEHICLE_EXPOSURE_MAX
 } from "../../../constants/walk-tuning";
 import { normalizeDogProfile, type DogProfile } from "../domain/dog-profile";
 import { calculateTargetDuration, type DurationOptions } from "../domain/target-duration";
@@ -131,6 +132,21 @@ export type RecommendedCourse = {
   breakdown: Pick<ScoreBreakdown, "safety" | "comfort" | "fit">;
   scoreDetails: RecommendedCourseScoreDetails;
   explanation: RecommendedCourseExplanation;
+  /** Change 2/8 (2026-08-14): short, concrete practical cautions for this
+   * specific course (risk zones, vehicle exposure, stairs for a
+   * stair-avoiding dog, etc.) — built by buildCourseCautions. Meant to
+   * replace the raw score/weight/contribution breakdown as what's shown to
+   * the end user in course-results.tsx's "이 코스 산책 시 고려사항" panel.
+   * Can be empty when nothing notable applies. */
+  cautions: string[];
+  /** Change 7 (2026-08-14): short feature-based display name (max 8
+   * Korean characters), e.g. "공원 많은 길". NOT populated here — it is
+   * added downstream by addAiExplanationsToCourses (ai-explanation.service
+   * .ts), the same place aiExplanation is added, since both come from the
+   * same OpenAI call (or the same rule-based fallback when no API key is
+   * configured). Declared optional here purely so this type documents the
+   * full shape a client can expect after that step runs. */
+  courseName?: string;
   preferenceInsight?: string | null;
   facts: RecommendedCourseFacts;
   path: { type: "LineString"; coordinates: [number, number][] };
@@ -152,6 +168,15 @@ export type RecommendationResult =
        * like "요청하신 시간과 정확히 맞진 않지만" rather than presenting
        * these as an exact match. */
       distanceApproximate?: boolean;
+      /** True when none of the final selected courses landed within
+       * DURATION_CLOSENESS_TOLERANCE_MINUTES of the resolved target — the
+       * duration-closeness preference (see applyDurationClosenessPreference)
+       * is a soft re-ranking signal, not a hard filter, so this can still
+       * happen when every hard-filtered candidate is far from the target
+       * duration. Optional so it never breaks existing consumers; the
+       * client can use it for messaging like "정확한 시간대의 코스를 찾지
+       * 못해 가장 가까운 코스를 보여드려요" in the future. */
+      durationApproximate?: boolean;
     };
 
 const recommendationCache = new TtlCache<string, RecommendationResult>(
@@ -379,6 +404,67 @@ function applyReviewPreferenceAdjustments(
           fit: components.fit,
           components,
           totalScore
+        }
+      };
+    })
+    .sort((a, b) => b.breakdown.totalScore - a.breakdown.totalScore);
+}
+
+/**
+ * Change 1 (2026-08-14 user request): courses were sometimes far off the
+ * requested duration (e.g. target 25min, ~10min shown). The user explicitly
+ * chose NOT to tighten DISTANCE_FILTER_TOLERANCE_RATIO back toward the
+ * spec's ±20% — that constant was deliberately widened to ±50% on
+ * 2026-08-10 after confirming a tighter filter causes frequent
+ * no_courses_found failures against real GraphHopper round_trip output (see
+ * the comment above DISTANCE_FILTER_TOLERANCE_RATIO in walk-tuning.ts).
+ * Instead this is a soft re-ranking preference applied after scoring: never
+ * excludes a candidate, only nudges duration-accurate ones higher. Kept
+ * small relative to ROUTE_SCORE_WEIGHTS.riskZones (35) so it can break ties
+ * and mild gaps without letting a duration match outweigh a real safety
+ * difference between candidates.
+ */
+const DURATION_CLOSENESS_TOLERANCE_MINUTES = 3;
+const DURATION_CLOSENESS_BONUS = 4;
+const DURATION_CLOSENESS_PENALTY_PER_EXTRA_MINUTE = 0.4;
+const DURATION_CLOSENESS_MAX_PENALTY = 4;
+
+function durationClosenessAdjustment(durationMinutes: number, targetMinutes: number): number {
+  const diffMinutes = Math.abs(durationMinutes - targetMinutes);
+
+  if (diffMinutes <= DURATION_CLOSENESS_TOLERANCE_MINUTES) {
+    return DURATION_CLOSENESS_BONUS;
+  }
+
+  const excessMinutes = diffMinutes - DURATION_CLOSENESS_TOLERANCE_MINUTES;
+  return -Math.min(
+    excessMinutes * DURATION_CLOSENESS_PENALTY_PER_EXTRA_MINUTE,
+    DURATION_CLOSENESS_MAX_PENALTY
+  );
+}
+
+/**
+ * Re-sorts already-scored, already-hard-filtered candidates so ones close
+ * to the target duration rank higher, without ever dropping a candidate.
+ * Must run AFTER applyReviewPreferenceAdjustments, not before — that
+ * function recomputes totalScore from scratch off `components * weights`,
+ * which would silently discard any earlier duration bonus/penalty baked
+ * into totalScore.
+ */
+function applyDurationClosenessPreference(
+  courses: readonly ScoredCourse[],
+  targetMinutes: number
+): ScoredCourse[] {
+  return courses
+    .map((course) => {
+      const durationMinutes = Math.round(course.facts.timeMs / 60000);
+      const adjustment = durationClosenessAdjustment(durationMinutes, targetMinutes);
+
+      return {
+        ...course,
+        breakdown: {
+          ...course.breakdown,
+          totalScore: course.breakdown.totalScore + adjustment
         }
       };
     })
@@ -776,6 +862,64 @@ function buildCourseExplanation(
   };
 }
 
+/** Vehicle-exposure values are on a 0..VEHICLE_EXPOSURE_MAX scale (5.6절);
+ * anything at or above the midpoint reads as "다소 높음" for a caution
+ * bullet — not tied to the scoring normalization, just a plain-language
+ * threshold for this specific display. */
+const VEHICLE_EXPOSURE_CAUTION_THRESHOLD = VEHICLE_EXPOSURE_MAX / 2;
+
+/** Dog-encounter-probability threshold (0..1 composite, see
+ * calculateDogEncounterProbability in scoring-weighted.ts) above/below
+ * which it's worth calling out for a dog whose personality cares about it. */
+const DOG_ENCOUNTER_CAUTION_HIGH_THRESHOLD = 0.5;
+const DOG_ENCOUNTER_CAUTION_LOW_THRESHOLD = 0.2;
+
+/**
+ * Change 2/8 (2026-08-14 user request): replaces the score/weight/
+ * contribution breakdown shown to users with concrete, risk-focused
+ * cautions built from the same underlying facts — "위험구간 2곳을
+ * 지나요" instead of an abstract "riskZones: 0.7". Deliberately only
+ * surfaces things worth being cautious about; positive traits belong in
+ * the AI/fallback course name and prose explanation, not here.
+ */
+function buildCourseCautions(
+  facts: CourseFacts,
+  breakdown: ScoreBreakdown,
+  profile: DogProfile
+): string[] {
+  const cautions: string[] = [];
+
+  if (facts.riskZoneCount > 0) {
+    cautions.push(`사고다발/위험구간 ${facts.riskZoneCount}곳을 지나요.`);
+  }
+
+  if (facts.vehicleExposureAvg === null) {
+    cautions.push("도로 매칭 데이터가 부족해 차량 노출도를 보수적으로 계산했어요.");
+  } else if (facts.vehicleExposureAvg >= VEHICLE_EXPOSURE_CAUTION_THRESHOLD) {
+    cautions.push("차량 노출도가 다소 높은 구간이 있어요.");
+  }
+
+  if (profile.needsStairFilter && facts.stepsCount > 0) {
+    cautions.push(`계단 ${facts.stepsCount}개가 있어요 (계단 회피 대상견 기준).`);
+  }
+
+  if (
+    profile.personality.avoidsDogs &&
+    breakdown.dogEncounterProbability >= DOG_ENCOUNTER_CAUTION_HIGH_THRESHOLD
+  ) {
+    cautions.push("다른 강아지를 마주칠 가능성이 있는 구간이에요.");
+  }
+
+  if (
+    profile.personality.prefersDogEncounters &&
+    breakdown.dogEncounterProbability < DOG_ENCOUNTER_CAUTION_LOW_THRESHOLD
+  ) {
+    cautions.push("이 코스는 다른 강아지를 만날 기회가 적을 수 있어요.");
+  }
+
+  return cautions;
+}
+
 function toRecommendedCourse(
   rank: number,
   facts: CourseFacts,
@@ -800,6 +944,7 @@ function toRecommendedCourse(
       fit: roundScore(breakdown.components.fit)
     },
     explanation: buildCourseExplanation(facts, breakdown, profile, targetMeters, reviewPreference),
+    cautions: buildCourseCautions(facts, breakdown, profile),
     preferenceInsight: reviewPreference.insight,
     facts: {
       vehicleExposure: facts.vehicleExposureAvg,
@@ -942,10 +1087,21 @@ export async function recommendWalkRoutes(
     reviewPreference
   );
 
-  const finalSelection = selectFinalCourses(
+  const durationAdjusted = applyDurationClosenessPreference(
     adjustedWithReviewPreferences,
+    targetMinutes
+  );
+
+  const finalSelection = selectFinalCourses(
+    durationAdjusted,
     (item) => item.facts.bearing.bin,
     (item) => buildRouteSignature(item.facts.points)
+  );
+
+  const durationApproximate = finalSelection.every(
+    (item) =>
+      Math.abs(Math.round(item.facts.timeMs / 60000) - targetMinutes) >
+      DURATION_CLOSENESS_TOLERANCE_MINUTES
   );
 
   const result: RecommendationResult = {
@@ -955,7 +1111,8 @@ export async function recommendWalkRoutes(
     ),
     warnings: warningEvaluation.warnings,
     durationOptions,
-    ...(distanceApproximate ? { distanceApproximate: true } : {})
+    ...(distanceApproximate ? { distanceApproximate: true } : {}),
+    ...(durationApproximate ? { durationApproximate: true } : {})
   };
 
   if (shouldUseRecommendationCache) {

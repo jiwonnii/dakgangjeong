@@ -38,6 +38,13 @@ const recommendedCourseExplanationFactorSchema = z.object({
 export const recommendedCourseSchema = z.object({
   rank: z.number().int().min(1),
   direction: z.string().trim().min(1).max(40).optional(),
+  /** Change 7: short feature-based display name (e.g. "공원 많은 길"),
+   * max 8 Korean characters by product rule. The stored max here is looser
+   * (40) than the display rule — see ai-explanation.service.ts's
+   * truncateCourseName for the actual 8-char enforcement; this schema just
+   * needs a generous ceiling so it never rejects a value the app itself
+   * produced. */
+  courseName: z.string().trim().min(1).max(40).optional(),
   distanceMeters: z.number().int().min(0),
   durationMinutes: z.number().int().min(0),
   score: z.number().optional(),
@@ -46,6 +53,10 @@ export const recommendedCourseSchema = z.object({
     summary: z.string().max(1000).optional(),
     factors: z.array(recommendedCourseExplanationFactorSchema).optional()
   }).optional(),
+  /** Change 2/8: plain-language practical cautions for this course (risk
+   * zones, vehicle exposure, stairs, etc.) — see buildCourseCautions in
+   * recommendation.service.ts. */
+  cautions: z.array(z.string().max(200)).optional(),
   facts: z.record(z.string(), z.unknown()).optional(),
   path: geoJsonLineStringSchema
 });

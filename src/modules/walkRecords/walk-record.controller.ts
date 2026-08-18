@@ -14,6 +14,7 @@ import type {
   walkStreakQuerySchema
 } from "./walk-record.schemas";
 import { createWalkRecordSummary } from "./walk-record-summary.service";
+import { classifyReviewFactors, type ReviewFactorKey } from "./review-preference-classifier.service";
 
 type WalkRecordRow = {
   id: string;
@@ -100,11 +101,12 @@ function toLineStringGeoJson(points: readonly LatLon[]): GeoJsonLineString | nul
   };
 }
 
-function toWalkRecord(row: WalkRecordRow) {
+function toWalkRecord(row: WalkRecordRow, guardianName: string | null = null) {
   return {
     id: row.id,
     dogId: row.dog_id,
     userId: row.user_id,
+    guardianName,
     startedAt: row.started_at,
     endedAt: row.ended_at,
     distanceMeters: row.distance_meters,
@@ -122,6 +124,42 @@ function toWalkRecord(row: WalkRecordRow) {
     aiSummary: row.ai_summary,
     createdAt: row.created_at
   };
+}
+
+/**
+ * user_id 로 남은 산책 기록 작성자를 실제 보호자 이름(guardian_profiles.display_name)으로
+ * 바꿔줄 Map을 만든다. guardian_profiles 는 auth user id를 그대로 id 컬럼(PK)으로 쓴다
+ * (onboarding.controller.ts의 ensureGuardianProfile, PUT /api/onboarding/guardian-profile 참고).
+ * 이 추가 조회가 실패해도 전체 요청을 실패시키지 않고 이름 없이(null) 내려준다.
+ */
+async function lookupGuardianNames(userIds: string[]): Promise<Map<string, string>> {
+  const uniqueIds = Array.from(new Set(userIds.filter((id): id is string => Boolean(id))));
+
+  if (uniqueIds.length === 0) {
+    return new Map();
+  }
+
+  try {
+    const supabase = getSupabaseAdminClient();
+    const { data, error } = await supabase
+      .from("guardian_profiles")
+      .select("id, display_name")
+      .in("id", uniqueIds);
+
+    if (error) {
+      console.warn("Failed to look up guardian names for walk records.", error);
+      return new Map();
+    }
+
+    return new Map(
+      ((data ?? []) as Array<{ id: string; display_name: string | null }>)
+        .filter((row) => row.display_name)
+        .map((row) => [row.id, row.display_name as string])
+    );
+  } catch (error) {
+    console.warn("Failed to look up guardian names for walk records.", error);
+    return new Map();
+  }
 }
 
 function averageSpeedMps(distanceMeters: number, durationSeconds: number): number | null {
@@ -146,6 +184,46 @@ async function completeWalkCareTaskAfterRecordSave({
   } catch (error) {
     console.warn("Failed to complete walk care task after saving a walk record.", error);
   }
+}
+
+/**
+ * Fills in `likedFactor`/`dislikedFactor` from free-text notes via the
+ * OpenAI-backed classifier when the client didn't explicitly pick one from
+ * the review dropdown, so the recommendation pipeline's preference
+ * learning (recommendation.service.ts's `loadReviewPreferenceSummary`)
+ * picks up the signal even for users who only typed a note.
+ *
+ * An explicit factor the client DID send is always respected as-is and
+ * never overridden. The classifier is only invoked when there is actually
+ * a gap to fill (a note present with no matching factor chosen), and any
+ * classification failure is treated as "no signal" rather than surfaced —
+ * saving the walk record must succeed even if OpenAI is unavailable.
+ */
+async function resolveReviewFactors(body: {
+  likedFactor?: ReviewFactorKey;
+  dislikedFactor?: ReviewFactorKey;
+  likedNotes?: string;
+  dislikedNotes?: string;
+}): Promise<{ likedFactor: ReviewFactorKey | null; dislikedFactor: ReviewFactorKey | null }> {
+  const needsLikedClassification = body.likedFactor === undefined && Boolean(body.likedNotes);
+  const needsDislikedClassification = body.dislikedFactor === undefined && Boolean(body.dislikedNotes);
+
+  if (!needsLikedClassification && !needsDislikedClassification) {
+    return {
+      likedFactor: body.likedFactor ?? null,
+      dislikedFactor: body.dislikedFactor ?? null
+    };
+  }
+
+  const classified = await classifyReviewFactors({
+    likedNotes: needsLikedClassification ? body.likedNotes : undefined,
+    dislikedNotes: needsDislikedClassification ? body.dislikedNotes : undefined
+  }).catch(() => ({ likedFactor: null, dislikedFactor: null }));
+
+  return {
+    likedFactor: body.likedFactor ?? classified.likedFactor,
+    dislikedFactor: body.dislikedFactor ?? classified.dislikedFactor
+  };
 }
 
 function localDateKeyKst(iso: string): string {
@@ -197,8 +275,11 @@ export const listWalkRecords: RequestHandler = async (req, res, next) => {
       throw new AppError(error.message, 500, "WALK_RECORD_LIST_FAILED");
     }
 
+    const rows = (data ?? []) as WalkRecordRow[];
+    const guardianNameById = await lookupGuardianNames(rows.map((row) => row.user_id));
+
     res.json({
-      records: ((data ?? []) as WalkRecordRow[]).map(toWalkRecord),
+      records: rows.map((row) => toWalkRecord(row, guardianNameById.get(row.user_id) ?? null)),
       limit: query.limit,
       offset: query.offset
     });
@@ -295,14 +376,15 @@ export const finishWalkRecord: RequestHandler = async (req, res, next) => {
     const endedAt = body.endedAt ?? new Date().toISOString();
     const route = toLineStringEwkt(body.path);
     const routeGeoJson = toLineStringGeoJson(body.path);
+    const { likedFactor, dislikedFactor } = await resolveReviewFactors(body);
     const aiSummary = createWalkRecordSummary({
       distanceMeters: body.distanceMeters,
       durationSeconds: body.durationSeconds,
       rating: body.rating,
       likedNotes: body.likedNotes,
       dislikedNotes: body.dislikedNotes,
-      likedFactor: body.likedFactor,
-      dislikedFactor: body.dislikedFactor,
+      likedFactor: likedFactor ?? undefined,
+      dislikedFactor: dislikedFactor ?? undefined,
       pointCount: body.path.length,
       isManual: false
     });
@@ -319,8 +401,8 @@ export const finishWalkRecord: RequestHandler = async (req, res, next) => {
         rating: body.rating ?? null,
         liked_notes: body.likedNotes ?? null,
         disliked_notes: body.dislikedNotes ?? null,
-        liked_factor: body.likedFactor ?? null,
-        disliked_factor: body.dislikedFactor ?? null,
+        liked_factor: likedFactor,
+        disliked_factor: dislikedFactor,
         ai_summary: aiSummary
       })
       .eq("id", walkRecordId)
@@ -406,14 +488,15 @@ export const createManualWalkRecord: RequestHandler = async (req, res, next) => 
     const endedAt = body.walkedAt ? new Date(body.walkedAt) : new Date();
     const startedAt = new Date(endedAt.getTime() - body.durationSeconds * 1000);
     const supabase = getSupabaseAdminClient();
+    const { likedFactor, dislikedFactor } = await resolveReviewFactors(body);
     const aiSummary = createWalkRecordSummary({
       distanceMeters: body.distanceMeters,
       durationSeconds: body.durationSeconds,
       rating: body.rating,
       likedNotes: body.likedNotes,
       dislikedNotes: body.dislikedNotes,
-      likedFactor: body.likedFactor,
-      dislikedFactor: body.dislikedFactor,
+      likedFactor: likedFactor ?? undefined,
+      dislikedFactor: dislikedFactor ?? undefined,
       isManual: true
     });
 
@@ -430,8 +513,8 @@ export const createManualWalkRecord: RequestHandler = async (req, res, next) => 
         rating: body.rating ?? null,
         liked_notes: body.likedNotes ?? null,
         disliked_notes: body.dislikedNotes ?? null,
-        liked_factor: body.likedFactor ?? null,
-        disliked_factor: body.dislikedFactor ?? null,
+        liked_factor: likedFactor,
+        disliked_factor: dislikedFactor,
         ai_summary: aiSummary
       })
       .select(WALK_RECORD_SELECT)

@@ -38,7 +38,10 @@ const FILES = [
   path.join(MIGRATIONS_DIR, "0007_road_overlay_matching.sql"),
   path.join(MIGRATIONS_DIR, "0008_bearing_grid_index_fix.sql"),
   path.join(MIGRATIONS_DIR, "0009_scoring_index_fix.sql"),
-  path.join(MIGRATIONS_DIR, "0010_walk_records_route_geojson.sql")
+  path.join(MIGRATIONS_DIR, "0010_walk_records_route_geojson.sql"),
+  path.join(MIGRATIONS_DIR, "0011_care_recurring_routines.sql"),
+  path.join(MIGRATIONS_DIR, "0012_walk_records_recommended_course.sql"),
+  path.join(MIGRATIONS_DIR, "0013_walk_records_review_factors.sql")
 ];
 
 async function main(): Promise<void> {
