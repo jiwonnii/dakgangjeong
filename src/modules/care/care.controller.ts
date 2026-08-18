@@ -159,7 +159,7 @@ function toRoutine(row: CareRoutineRow) {
   };
 }
 
-function toTask(row: CareTaskRow) {
+function toTask(row: CareTaskRow, guardianName: string | null = null) {
   return {
     id: row.id,
     dogId: row.dog_id,
@@ -172,9 +172,46 @@ function toTask(row: CareTaskRow) {
     completedAt: row.completed_at,
     skippedAt: row.skipped_at,
     completedBy: row.completed_by,
+    guardianName,
     note: row.note,
     createdAt: row.created_at
   };
+}
+
+/**
+ * completed_by 로 남은 사용자 id들을 실제 보호자 이름(guardian_profiles.display_name)으로
+ * 바꿔줄 Map을 만든다. guardian_profiles 는 auth user id를 그대로 id 컬럼(PK)으로 쓴다
+ * (onboarding.controller.ts의 ensureGuardianProfile 참고). 이 조회가 실패해도 전체 요청을
+ * 실패시키지 않고 이름 없이(null) 내려준다 — walk-record.controller.ts와 동일한 best-effort 패턴.
+ */
+async function lookupGuardianNames(userIds: string[]): Promise<Map<string, string>> {
+  const uniqueIds = Array.from(new Set(userIds.filter((id): id is string => Boolean(id))));
+
+  if (uniqueIds.length === 0) {
+    return new Map();
+  }
+
+  try {
+    const supabase = getSupabaseAdminClient();
+    const { data, error } = await supabase
+      .from("guardian_profiles")
+      .select("id, display_name")
+      .in("id", uniqueIds);
+
+    if (error) {
+      console.warn("Failed to look up guardian names for care tasks.", error);
+      return new Map();
+    }
+
+    return new Map(
+      ((data ?? []) as Array<{ id: string; display_name: string | null }>)
+        .filter((row) => row.display_name)
+        .map((row) => [row.id, row.display_name as string])
+    );
+  } catch (error) {
+    console.warn("Failed to look up guardian names for care tasks.", error);
+    return new Map();
+  }
 }
 
 async function assertDogGuardian(dogId: string, userId: string): Promise<void> {
@@ -422,10 +459,17 @@ export const getTodayCareStatus: RequestHandler = async (req, res, next) => {
       throw new AppError(taskError.message, 500, "CARE_TASK_LIST_FAILED");
     }
 
+    const taskRows = (tasks ?? []) as CareTaskRow[];
+    const guardianNameById = await lookupGuardianNames(
+      taskRows.map((row) => row.completed_by).filter((id): id is string => Boolean(id))
+    );
+
     res.json({
       date: dateKey,
       routines: ((routines ?? []) as CareRoutineRow[]).map(toRoutine),
-      tasks: ((tasks ?? []) as CareTaskRow[]).map(toTask)
+      tasks: taskRows.map((row) =>
+        toTask(row, row.completed_by ? (guardianNameById.get(row.completed_by) ?? null) : null)
+      )
     });
   } catch (error) {
     next(error);
