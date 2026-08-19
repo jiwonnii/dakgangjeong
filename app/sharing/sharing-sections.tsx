@@ -106,31 +106,19 @@ export function ManualSection({
   const doneCount = tasks.filter((task) => task.status === "completed").length;
 
   return (
-    <article className="rounded-[20px] border border-ms-line bg-ms-card p-[16px] shadow-sm">
-      <div className="flex items-start justify-between gap-[12px]">
-        <div className="flex items-center gap-[10px]">
-          <span className="grid h-[38px] w-[38px] place-items-center rounded-[14px] bg-ms-weather text-ms-emphasis-green">
-            <Icon size={19} strokeWidth={2.2} />
-          </span>
-          <div>
-            <h2 className="text-[16px] font-extrabold leading-none text-ms-ink">{CARE_LABELS[kind]}</h2>
-            <p className="mt-[6px] text-[12px] font-semibold text-ms-muted">
-              {doneCount}/{tasks.length} 완료
-            </p>
-          </div>
-        </div>
-        <span
-          className={`rounded-full px-[10px] py-[6px] text-[12px] font-extrabold ${
-            tasks.length > 0 && doneCount === tasks.length ? "bg-ms-ok-bg text-ms-ok-fg" : "bg-ms-sunken text-ms-secondary"
-          }`}
-        >
-          {tasks.length}회
+    <section>
+      <div className="flex items-center justify-between px-[4px]">
+        <p className="text-[12px] font-bold text-ms-muted">{CARE_LABELS[kind]}</p>
+        <span className="text-[11px] font-bold text-ms-muted">
+          {doneCount}/{tasks.length}
         </span>
       </div>
 
-      <div className="mt-[14px] grid gap-[8px]">
+      <div className="mt-[8px] grid gap-[8px]">
         {tasks.length === 0 ? (
-          <p className="text-[12px] font-bold text-ms-muted">오늘 등록된 일정이 없어요.</p>
+          <p className="rounded-[16px] bg-ms-sunken px-[16px] py-[14px] text-[12px] font-bold text-ms-muted">
+            오늘 등록된 일정이 없어요.
+          </p>
         ) : (
           tasks.map((task) => {
             const isChecked = task.status === "completed";
@@ -142,33 +130,46 @@ export function ManualSection({
             return (
               <button
                 aria-pressed={isChecked}
-                className={`flex h-[48px] items-center justify-between rounded-[16px] border px-[13px] transition disabled:opacity-60 ${
-                  isChecked
-                    ? "border-ms-action-green bg-ms-weather text-ms-ink"
-                    : "border-ms-line bg-ms-card text-ms-secondary"
+                className={`flex h-[58px] w-full items-center gap-[12px] rounded-[20px] px-[16px] transition disabled:opacity-60 ${
+                  isChecked ? "border border-ms-line bg-ms-card" : "bg-ms-sunken"
                 }`}
                 disabled={isUpdating}
                 key={task.id}
                 onClick={() => void onToggle(task)}
                 type="button"
               >
-                <span className="flex items-center gap-[9px]">
+                <span
+                  className={`grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full border-2 ${
+                    isChecked
+                      ? "border-ms-emphasis-blue bg-ms-emphasis-blue text-white"
+                      : "border-ms-line-strong bg-ms-card"
+                  }`}
+                >
+                  {isChecked ? <Check size={15} strokeWidth={3} /> : null}
+                </span>
+
+                <span className="flex-1 text-left">
                   <span
-                    className={`grid h-[24px] w-[24px] place-items-center rounded-full border ${
-                      isChecked ? "border-ms-action-green bg-ms-action-green text-ms-on-green" : "border-ms-line"
+                    className={`block text-[14px] font-extrabold ${
+                      isChecked ? "text-ms-muted line-through" : "text-ms-ink"
                     }`}
                   >
-                    {isChecked ? <Check size={15} strokeWidth={2.8} /> : null}
+                    {taskBandLabel(task, tasks)}
                   </span>
-                  <span className="text-[14px] font-extrabold">{taskBandLabel(task, tasks)}</span>
+                  {isChecked ? (
+                    <span className="mt-[2px] block text-[11px] font-bold text-ms-muted">{doneLabel}</span>
+                  ) : null}
                 </span>
-                <span className="text-[12px] font-bold text-ms-muted">{isChecked ? doneLabel : "미완료"}</span>
+
+                <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-ms-badge-blue text-ms-emphasis-blue">
+                  <Icon size={16} strokeWidth={2.2} />
+                </span>
               </button>
             );
           })
         )}
       </div>
-    </article>
+    </section>
   );
 }
 
@@ -176,59 +177,65 @@ export function ManualSection({
 export function WalkSection({ tasks }: { tasks: CareTask[] }) {
   const done = tasks.filter((task) => task.status === "completed").length;
   const total = tasks.length;
-  const progress = total > 0 ? Math.round((done / total) * 100) : 0;
 
   return (
-    <article className="rounded-[20px] border border-ms-line bg-ms-card p-[16px] shadow-sm">
-      <div className="flex items-start justify-between gap-[12px]">
-        <div className="flex items-center gap-[10px]">
-          <span className="grid h-[38px] w-[38px] place-items-center rounded-[14px] bg-ms-weather text-ms-emphasis-green">
-            <Footprints size={19} strokeWidth={2.2} />
-          </span>
-          <div>
-            <h2 className="text-[16px] font-extrabold leading-none text-ms-ink">산책</h2>
-            <p className="mt-[6px] text-[12px] font-semibold text-ms-muted">
-              앱에서 산책하거나 기록하면 자동으로 완료돼요
-            </p>
-          </div>
-        </div>
-        <span
-          className={`rounded-full px-[10px] py-[6px] text-[12px] font-extrabold ${
-            total > 0 && done === total ? "bg-ms-ok-bg text-ms-ok-fg" : "bg-ms-sunken text-ms-secondary"
-          }`}
-        >
+    <section>
+      <div className="flex items-center justify-between px-[4px]">
+        <p className="text-[12px] font-bold text-ms-muted">산책</p>
+        <span className="text-[11px] font-bold text-ms-muted">
           {done}/{total}
         </span>
       </div>
 
-      {total === 0 ? (
-        <p className="mt-[14px] text-[12px] font-bold text-ms-muted">오늘 등록된 일정이 없어요.</p>
-      ) : (
-        <>
-          <div className="mt-[16px] h-[10px] overflow-hidden rounded-full bg-ms-sunken">
-            <div className="h-full rounded-full bg-ms-action-green" style={{ width: `${progress}%` }} />
-          </div>
+      <div className="mt-[8px] grid gap-[8px]">
+        {total === 0 ? (
+          <p className="rounded-[16px] bg-ms-sunken px-[16px] py-[14px] text-[12px] font-bold text-ms-muted">
+            오늘 등록된 일정이 없어요.
+          </p>
+        ) : (
+          tasks.map((task) => {
+            const isChecked = task.status === "completed";
 
-          <div className="mt-[13px] flex items-center justify-between gap-[10px]">
-            <div className="flex flex-wrap gap-[6px]">
-              {tasks.map((task) => (
+            return (
+              <div
+                className={`flex h-[58px] w-full items-center gap-[12px] rounded-[20px] px-[16px] ${
+                  isChecked ? "border border-ms-line bg-ms-card" : "bg-ms-sunken"
+                }`}
+                key={task.id}
+              >
                 <span
-                  className={`rounded-full px-[9px] py-[5px] text-[11px] font-bold ${
-                    task.status === "completed" ? "bg-ms-weather text-ms-emphasis-green" : "bg-ms-sunken text-ms-secondary"
+                  className={`grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full border-2 ${
+                    isChecked
+                      ? "border-ms-emphasis-blue bg-ms-emphasis-blue text-white"
+                      : "border-ms-line-strong bg-ms-card"
                   }`}
-                  key={task.id}
+                >
+                  {isChecked ? <Check size={15} strokeWidth={3} /> : null}
+                </span>
+
+                <span
+                  className={`flex-1 text-left text-[14px] font-extrabold ${
+                    isChecked ? "text-ms-muted line-through" : "text-ms-ink"
+                  }`}
                 >
                   {taskBandLabel(task, tasks)}
                 </span>
-              ))}
-            </div>
-            <span className="flex shrink-0 items-center gap-[5px] text-[12px] font-extrabold text-ms-emphasis-green">
-              <UserRound size={14} strokeWidth={2.2} />
-              앱 자동
-            </span>
-          </div>
-        </>
-      )}
-    </article>
+
+                <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-ms-badge-blue text-ms-emphasis-blue">
+                  <Footprints size={16} strokeWidth={2.2} />
+                </span>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {total > 0 ? (
+        <p className="mt-[10px] flex items-center justify-end gap-[5px] px-[4px] text-[11px] font-bold text-ms-emphasis-blue">
+          <UserRound size={13} strokeWidth={2.2} />
+          앱에서 산책하면 자동으로 체크돼요
+        </p>
+      ) : null}
+    </section>
   );
 }

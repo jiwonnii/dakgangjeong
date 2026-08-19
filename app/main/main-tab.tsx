@@ -64,8 +64,18 @@ function smoothPath(points: { x: number; y: number }[]) {
 }
 
 const BAND_MID = (BAND_MIN + BAND_MAX) / 2;
-const BAND_HALF = (BAND_MAX - BAND_MIN) / 2;
 const WAVE_AMPLITUDE = 0.35; // km 단위. 중심선이 흔들리는 폭
+
+// 밴드를 3겹의 굵은 곡선 스트로크로 쌓는다. 같은 파형을 픽셀 단위로 위/아래로
+// 밀어서 겹치므로 세 밴드가 항상 평행하고, 시작/끝 x좌표도 동일하게 맞는다.
+// 위로 갈수록 진하고 얇게, 아래로(데이터 선에 가까울수록) 연하고 굵게 배치한다.
+const BAND_STROKE_WIDTH = 10; // px
+const BAND_LAYER_GAP = 16; // px, 밴드 사이 수직 간격
+const BAND_LAYERS = [
+  { shiftPx: BAND_LAYER_GAP, colorVar: "--band-fill-top" },
+  { shiftPx: 0, colorVar: "--band-fill-solid" },
+  { shiftPx: -BAND_LAYER_GAP, colorVar: "--band-fill-bottom" }
+];
 
 type DayPoint = { dateKey: string; label: string; km: number; walkCount: number };
 
@@ -311,18 +321,18 @@ export function MainTab() {
   const todayKm = week[week.length - 1]?.km ?? 0;
 
   const bandCenters = week.map((_, index) => BAND_MID + WAVE_AMPLITUDE * Math.sin(index * 1.1 + 0.6));
-  const bandTopPoints = bandCenters.map((center, index) => ({
-    x: xFor(index, week.length),
-    y: yFor(center + BAND_HALF, chartMax)
-  }));
-  const bandBottomPoints = bandCenters.map((center, index) => ({
-    x: xFor(index, week.length),
-    y: yFor(center - BAND_HALF, chartMax)
-  }));
-  const bandPath = `${smoothPath(bandTopPoints)} L ${bandBottomPoints[bandBottomPoints.length - 1].x} ${
-    bandBottomPoints[bandBottomPoints.length - 1].y
-  } ${smoothPath([...bandBottomPoints].reverse()).replace(/^M [^C]+/, "")} Z`;
-  const linePath = weekKm.map((km, index) => `${index === 0 ? "M" : "L"}${xFor(index, week.length)} ${yFor(km, chartMax)}`).join(" ");
+  const bandLayerPaths = BAND_LAYERS.map(({ shiftPx }) =>
+    smoothPath(
+      bandCenters.map((center, index) => ({
+        x: xFor(index, week.length),
+        y: yFor(center, chartMax) - shiftPx
+      }))
+    )
+  );
+  // 실제 산책 데이터 선도 밴드와 같은 방식(Catmull-Rom)으로 곡선화해서,
+  // 시작점·끝점이 각 요일 x좌표에 정확히 물리도록 한다.
+  const linePoints = weekKm.map((km, index) => ({ x: xFor(index, week.length), y: yFor(km, chartMax) }));
+  const linePath = smoothPath(linePoints);
 
   const careRows = useMemo(() => {
     const tasks = care?.tasks ?? [];
@@ -456,14 +466,17 @@ export function MainTab() {
               role="img"
               viewBox={`0 0 ${CHART_W} ${CHART_H}`}
             >
-              <defs>
-                <linearGradient id="bandFill" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" style={{ stopColor: "var(--band-fill-top)" }} />
-                  <stop offset="100%" style={{ stopColor: "var(--band-fill-bottom)" }} />
-                </linearGradient>
-              </defs>
-
-              <path d={bandPath} fill="url(#bandFill)" />
+              {BAND_LAYERS.map((layer, index) => (
+                <path
+                  d={bandLayerPaths[index]}
+                  fill="none"
+                  key={layer.colorVar}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={BAND_STROKE_WIDTH}
+                  style={{ stroke: `var(${layer.colorVar})` }}
+                />
+              ))}
 
               <path
                 d={linePath}
@@ -645,32 +658,32 @@ export function MainTab() {
               </div>
             </article>
 
-            <article className="w-full flex-none snap-start rounded-[20px] bg-ms-card p-[18px] shadow-sm">
+            <article className="w-full flex-none snap-start rounded-[20px] bg-ms-weekly p-[18px] text-ms-on-weekly shadow-sm">
               <div className="flex items-center justify-between">
                 <p className="text-[14px] font-bold">주간 요약</p>
-                <span className="rounded-full bg-ms-ok-bg px-[9px] py-[4px] text-[11px] font-bold text-ms-ok-fg">
+                <span className="rounded-full bg-white px-[9px] py-[4px] text-[11px] font-bold text-ms-weekly">
                   무료
                 </span>
               </div>
               <dl className="mt-[14px] grid grid-cols-3 gap-[8px]">
                 <div>
-                  <dt className="text-[12px] text-ms-muted">총 거리</dt>
+                  <dt className="text-[12px] text-ms-on-weekly-secondary">총 거리</dt>
                   <dd className="mt-[6px] text-[18px] font-bold">{weekTotal.toFixed(1)}km</dd>
                 </div>
                 <div>
-                  <dt className="text-[12px] text-ms-muted">산책한 날</dt>
+                  <dt className="text-[12px] text-ms-on-weekly-secondary">산책한 날</dt>
                   <dd className="mt-[6px] text-[18px] font-bold">{walkedDays}일</dd>
                 </div>
                 <div>
-                  <dt className="text-[12px] text-ms-muted">하루 평균</dt>
+                  <dt className="text-[12px] text-ms-on-weekly-secondary">하루 평균</dt>
                   <dd className="mt-[6px] text-[18px] font-bold">{weekAverage.toFixed(1)}km</dd>
                 </div>
               </dl>
-              <p className="mt-[14px] text-[13px] leading-[1.6] text-ms-secondary">
+              <p className="mt-[14px] text-[13px] leading-[1.6] text-ms-on-weekly-secondary">
                 최근 기록 {records.length}개를 기준으로 이번 주 산책 리듬을 정리했어요.
               </p>
               <Link
-                className="mt-[16px] flex h-[42px] w-full items-center justify-center rounded-[14px] bg-ms-action-green text-[14px] font-bold text-ms-on-green active:bg-ms-action-green-pressed"
+                className="mt-[16px] flex h-[42px] w-full items-center justify-center rounded-[14px] bg-white text-[14px] font-bold text-ms-weekly active:bg-white/90"
                 href="/records"
               >
                 주간 요약 열기

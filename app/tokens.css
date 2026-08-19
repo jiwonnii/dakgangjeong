@@ -19,6 +19,8 @@
 
   --p-periwinkle-400: #6d8df5;
   --p-periwinkle-300: #93aaf8;
+  --p-periwinkle-500: #7b93f2; /* "내 활동 요약 · 주간" 신규 카드 배경 스크린샷에서 추출 (육안 추정치) */
+  --p-periwinkle-100: #e8ecfe; /* periwinkle-400을 옅게 튼 배지 배경용 톤 */
 
   --p-ember-100: #feedbf;
   --p-ember-300: #ffbb00;
@@ -57,6 +59,13 @@
   --action-green-pressed: var(--p-green-650-pressed);
   --text-on-green: var(--p-ink);
 
+  /* 홈 화면 "주간 요약" 카드 배경 */
+  --surface-weekly: var(--p-periwinkle-500);
+  --text-on-weekly: var(--p-white);
+  --text-on-weekly-secondary: rgba(255, 255, 255, 0.78);
+
+  --surface-badge-blue: var(--p-periwinkle-100);
+
   --walk-minimum: var(--p-periwinkle-400);
   --walk-optimal: var(--p-green-500);
   --walk-free: var(--brand);
@@ -66,6 +75,7 @@
   --text-muted: #747078;
   --text-emphasis: var(--p-ember-700);
   --text-emphasis-green: var(--p-forest-700);
+  --text-emphasis-blue: var(--p-periwinkle-400);
 
   --text-on-brand: var(--p-ink);
   --text-on-sky: var(--p-ink);
