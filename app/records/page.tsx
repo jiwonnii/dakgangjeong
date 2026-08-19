@@ -6,8 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
-  Flame,
-  Footprints,
+  PawPrint,
   MapPin,
   Route,
   Save,
@@ -16,6 +15,7 @@ import {
   Waypoints
 } from "lucide-react";
 import Link from "next/link";
+import { StreakFlameIcon } from "../_components/StreakFlameIcon";
 import { useAuth } from "../auth-context";
 import {
   WEEKDAY_LABELS,
@@ -232,7 +232,7 @@ export default function RecordsTabPage() {
 
         <section className="mt-4 flex items-center justify-between gap-[10px] rounded-[16px] bg-ms-card px-[16px] py-[12px] shadow-sm">
           <span className="flex items-center gap-[8px] text-[13px] font-extrabold text-ms-secondary">
-            <Flame className="text-ms-emphasis" size={17} strokeWidth={2.2} />
+            <StreakFlameIcon className="text-ms-emphasis" size={17} />
             연속 산책
           </span>
           <span className="text-[15px] font-extrabold text-ms-emphasis">
@@ -387,7 +387,7 @@ export default function RecordsTabPage() {
 
             <dl className="mt-[12px] grid grid-cols-3 gap-[8px]">
               <div className="rounded-[18px] border border-ms-line bg-ms-card p-[14px] shadow-sm">
-                <Footprints className="text-ms-emphasis-green" size={19} strokeWidth={2.2} />
+                <PawPrint className="text-ms-emphasis-green" size={19} strokeWidth={2.2} />
                 <dt className="mt-[12px] text-[11px] font-bold text-ms-muted">총 거리</dt>
                 <dd className="mt-[5px] whitespace-nowrap text-[14px] font-extrabold">
                   {formatDistance(weekTotals.distanceMeters)}

@@ -29,7 +29,7 @@ function TabBar() {
             <li className="flex-1 list-none" key={tab.href}>
               <Link
                 aria-current={isActive ? "page" : undefined}
-                className={`flex h-[46px] w-full items-center justify-center gap-[7px] rounded-full text-[13px] font-bold transition ${
+                className={`flex h-[46px] w-full flex-col items-center justify-center gap-[2px] rounded-full text-[10px] font-bold transition ${
                   isActive ? "bg-ms-sunken text-ms-emphasis" : "text-ms-muted"
                 }`}
                 href={tab.href}

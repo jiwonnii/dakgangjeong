@@ -1,6 +1,6 @@
 "use client";
 
-import { Footprints, SlidersHorizontal, Sparkles, TimerReset, type LucideIcon } from "lucide-react";
+import { PawPrint, SlidersHorizontal, Sparkles, TimerReset, type LucideIcon } from "lucide-react";
 import type { DurationOptions } from "../lib/types";
 
 export type DurationChoice = "minimum" | "recommended" | "custom" | "free";
@@ -14,7 +14,7 @@ const CARD_ICONS: Record<DurationChoice, LucideIcon> = {
   minimum: TimerReset,
   recommended: Sparkles,
   custom: SlidersHorizontal,
-  free: Footprints
+  free: PawPrint
 };
 
 function formatMinutes(minutes: number) {
@@ -49,7 +49,10 @@ export function DurationPicker({
       : CUSTOM_MAX_MINUTES;
   const isCappedByDog = sliderMax < CUSTOM_MAX_MINUTES;
   const cappedCustomMinutes = Math.min(customMinutes, sliderMax);
-  const sliderProgress = ((cappedCustomMinutes - CUSTOM_MIN_MINUTES) / (sliderMax - CUSTOM_MIN_MINUTES)) * 100;
+  const tickValues = Array.from(
+    { length: Math.round((sliderMax - CUSTOM_MIN_MINUTES) / CUSTOM_STEP_MINUTES) + 1 },
+    (_, index) => CUSTOM_MIN_MINUTES + index * CUSTOM_STEP_MINUTES
+  );
 
   const cards: Array<{ value: DurationChoice; title: string; badge: string; hint: string }> = [
     {
@@ -81,41 +84,50 @@ export function DurationPicker({
           return (
             <button
               aria-pressed={isSelected}
-              className={`h-[108px] overflow-hidden rounded-[18px] p-[12px] text-left shadow-sm transition ${
-                isSelected ? "bg-ms-action-green" : "border border-ms-line bg-ms-card"
+              className={`h-[108px] overflow-hidden rounded-[18px] p-[12px] text-left transition ${
+                isSelected ? "border border-ms-brand" : "border border-transparent bg-ms-sunken"
               }`}
               key={card.value}
               onClick={() => onChoiceChange(card.value)}
+              style={isSelected ? { backgroundColor: "color-mix(in srgb, var(--brand) 12%, white)" } : undefined}
               type="button"
             >
               <div className="flex items-start justify-between">
                 <span
                   className={`grid h-[32px] w-[32px] place-items-center rounded-[11px] ${
-                    isSelected
-                      ? "bg-ms-action-green-pressed text-ms-on-green"
-                      : "bg-ms-sunken text-ms-emphasis-green"
+                    isSelected ? "bg-white text-ms-brand" : "bg-ms-card text-ms-emphasis-green"
                   }`}
                 >
                   <Icon size={17} strokeWidth={2.2} />
                 </span>
-                <span
-                  className={`rounded-full px-[8px] py-[4px] text-[10px] font-extrabold ${
-                    isSelected ? "bg-ms-action-green-pressed text-ms-on-green" : "bg-ms-sunken text-ms-muted"
-                  }`}
-                >
-                  {card.badge}
+                <span className="flex items-center gap-[6px]">
+                  <span
+                    className={`rounded-full px-[8px] py-[4px] text-[10px] font-extrabold ${
+                      isSelected ? "bg-white text-ms-brand" : "bg-ms-card text-ms-muted"
+                    }`}
+                  >
+                    {card.badge}
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className={`grid h-[16px] w-[16px] shrink-0 place-items-center rounded-full border-2 ${
+                      isSelected ? "border-ms-brand" : "border-ms-line-strong"
+                    }`}
+                  >
+                    {isSelected ? <span className="h-[6px] w-[6px] rounded-full bg-ms-brand" /> : null}
+                  </span>
                 </span>
               </div>
               <p
                 className={`mt-[10px] truncate text-[14px] font-extrabold leading-none ${
-                  isSelected ? "text-ms-on-green" : "text-ms-ink"
+                  isSelected ? "text-ms-brand" : "text-ms-ink"
                 }`}
               >
                 {card.title}
               </p>
               <p
                 className={`mt-[7px] truncate text-[11px] font-semibold leading-none ${
-                  isSelected ? "text-ms-on-green" : "text-ms-secondary"
+                  isSelected ? "text-ms-brand" : "text-ms-secondary"
                 }`}
               >
                 {card.hint}
@@ -125,26 +137,30 @@ export function DurationPicker({
         })}
       </div>
 
-      {/* 시안(초록 트랙 + 흰 손잡이 안 주황 점) 참고 — .km-slider-* 는 globals.css 참고 */}
+      {/* 시안(눈금자 스타일) 참고 — 실제 조작은 투명한 type=range input이 맡고,
+          눈금은 그 위에 장식으로 그린다. */}
       {choice === "custom" && (
         <div className="mt-[10px] rounded-[18px] border border-ms-line bg-ms-card p-[16px] shadow-sm">
-          <div className="flex items-baseline justify-between">
+          <div className="text-center">
             <p className="text-[13px] font-bold text-ms-secondary">목표 시간</p>
-            <p className="text-[20px] font-extrabold">{formatMinutes(cappedCustomMinutes)}</p>
+            <p className="mt-[6px] text-[36px] font-extrabold leading-none">{cappedCustomMinutes}</p>
+            <p className="mt-[4px] text-[11px] font-bold text-ms-muted">분</p>
           </div>
-          <div
-            className="km-slider-shell mt-[14px]"
-            style={{ "--km-slider-progress": `${sliderProgress}%` } as React.CSSProperties}
-          >
-            <span className="km-slider-cap km-slider-cap-left" />
-            <span className="km-slider-cap km-slider-cap-right" />
-            <span className="km-slider-track">
-              <span className="km-slider-fill" />
-              <span className="km-slider-thumb-visual" />
-            </span>
+
+          <div className="relative mt-[18px] h-[32px]">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-between">
+              {tickValues.map((tickValue) => (
+                <span
+                  className={`w-[2px] rounded-full ${
+                    tickValue === cappedCustomMinutes ? "h-[26px] bg-ms-ink" : "h-[12px] bg-ms-line-strong"
+                  }`}
+                  key={tickValue}
+                />
+              ))}
+            </div>
             <input
               aria-label="사용자 지정 산책 시간"
-              className="km-slider"
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
               max={sliderMax}
               min={CUSTOM_MIN_MINUTES}
               onChange={(event) => onCustomMinutesChange(Number(event.target.value))}
@@ -153,6 +169,7 @@ export function DurationPicker({
               value={cappedCustomMinutes}
             />
           </div>
+
           <div className="mt-[8px] flex justify-between text-[11px] font-semibold text-ms-muted">
             <span>{formatMinutes(CUSTOM_MIN_MINUTES)}</span>
             <span>{formatMinutes(sliderMax)}</span>

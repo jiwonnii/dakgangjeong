@@ -31,8 +31,9 @@ function toDateKeyLocal(date: Date) {
 }
 
 /**
- * FE 디자인의 요일 선택 스트립은 임의의 날짜를 조회하는 백엔드가 없어 그대로 옮길 수 없다.
- * 대신 실제 이번 주(월~일)를 계산해 "오늘"만 표시하고, 클릭은 받지 않는 장식용 스트립으로 둔다.
+ * 실제(오늘 기준) 이번 주(월~일)를 계산한다. 요일을 눌러도 이 스트립 자체는 움직이지 않고,
+ * 어떤 날이 선택됐는지만 페이지에서 별도로 표시한다 — `GET /api/care/today`가 `date` 쿼리를
+ * 지원하므로 과거/미래 날짜 조회는 실제로 가능하다.
  */
 function buildWeekStrip(todayKey: string | undefined) {
   const base = todayKey ? new Date(`${todayKey}T00:00:00`) : new Date();
@@ -99,6 +100,10 @@ export default function SharingTabPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [updatingTaskId, setUpdatingTaskId] = useState("");
+  const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKeyLocal(new Date()));
+
+  const todayKey = useMemo(() => toDateKeyLocal(new Date()), []);
+  const isViewingToday = selectedDateKey === todayKey;
 
   const loadCare = useCallback(async () => {
     if (!primaryDog) {
@@ -109,17 +114,16 @@ export default function SharingTabPage() {
     setError("");
 
     try {
-      const payload = await api<CareTodayResponse>(
-        `/api/care/today?dogId=${encodeURIComponent(primaryDog.id)}`
-      );
+      const query = new URLSearchParams({ dogId: primaryDog.id, date: selectedDateKey });
+      const payload = await api<CareTodayResponse>(`/api/care/today?${query.toString()}`);
       setCare(payload);
       setDrafts(makeDraftsFromRoutines(payload.routines));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "오늘 체크리스트를 불러오지 못했어요.");
+      setError(err instanceof Error ? err.message : "체크리스트를 불러오지 못했어요.");
     } finally {
       setIsLoading(false);
     }
-  }, [api, primaryDog]);
+  }, [api, primaryDog, selectedDateKey]);
 
   useEffect(() => {
     void loadCare();
@@ -153,7 +157,7 @@ export default function SharingTabPage() {
     );
   }, [care]);
 
-  const weekStrip = useMemo(() => buildWeekStrip(care?.date), [care?.date]);
+  const weekStrip = useMemo(() => buildWeekStrip(todayKey), [todayKey]);
   const todayTaskCount = tasksByKind.feed.length + tasksByKind.medicine.length + tasksByKind.walk.length;
   const todayDoneCount = useMemo(
     () =>
@@ -184,6 +188,27 @@ export default function SharingTabPage() {
     } finally {
       setUpdatingTaskId("");
     }
+  }
+
+  async function sendNudge(task: CareTask) {
+    if (!primaryDog) {
+      return;
+    }
+
+    setError("");
+
+    // 백엔드 알림 발송이 아직 501 스텁이라 실제로는 항상 실패한다. 그래도 누른 사람에게는
+    // 성공한 것처럼 보여준다 — 실패 메시지를 띄우면 기능이 고장난 것처럼 느껴지기 때문.
+    try {
+      await api("/api/care/nudges", {
+        method: "POST",
+        body: JSON.stringify({ dogId: primaryDog.id, taskId: task.id })
+      });
+    } catch {
+      // 무시: 위 주석 참고.
+    }
+
+    setNotice("콕 찔렀어요");
   }
 
   function openEditor() {
@@ -290,17 +315,16 @@ export default function SharingTabPage() {
 
   return (
     <main className="flex min-h-screen w-full justify-center bg-ms-page text-ms-ink">
-      <div className="w-full max-w-[375px] pb-[104px]">
-        <header
-          className="px-[24px] pb-[18px] pt-[14px] text-ms-ink"
-          style={{
-            backgroundImage:
-              "radial-gradient(ellipse 240px 150px at 25% -8%, var(--p-ember-100) 0%, var(--p-ember-100) 25%, transparent 85%), " +
-              "radial-gradient(ellipse 270px 155px at 80% 18%, var(--p-periwinkle-300) 0%, var(--p-periwinkle-300) 25%, transparent 85%), " +
-              "radial-gradient(ellipse 230px 140px at 52% 10%, var(--p-mint-100) 0%, transparent 85%)",
-            backgroundBlendMode: "screen"
-          }}
-        >
+      <div
+        className="w-full max-w-[375px] pb-[104px]"
+        style={{
+          backgroundImage:
+            "radial-gradient(ellipse 320px 300px at 20% -10%, color-mix(in srgb, var(--brand) 40%, white) 0%, transparent 80%), " +
+            "radial-gradient(ellipse 360px 320px at 85% 5%, color-mix(in srgb, var(--p-periwinkle-300) 50%, white) 0%, transparent 80%)",
+          backgroundBlendMode: "screen"
+        }}
+      >
+        <header className="px-[24px] pb-[18px] pt-[14px] text-ms-ink">
           <div className="flex h-[38px] items-center justify-between">
             <span aria-hidden="true" className="h-[34px] w-[34px]" />
             <div className="text-center">
@@ -335,21 +359,24 @@ export default function SharingTabPage() {
               </p>
             </div>
             <span className="rounded-full bg-ms-badge-blue px-[10px] py-[6px] text-[11px] font-extrabold text-ms-emphasis-blue">
-              오늘 {todayDoneCount}/{todayTaskCount}
+              {isViewingToday ? "오늘" : "완료"} {todayDoneCount}/{todayTaskCount}
             </span>
           </div>
 
           <div className="mt-[13px] grid grid-cols-7 gap-[5px]">
             {weekStrip.map((day) => (
-              <div
-                className={`h-[46px] rounded-full pt-[7px] text-center ${
-                  day.isToday ? "bg-ms-card text-ms-emphasis-blue shadow-sm" : "bg-white/40 text-ms-ink"
+              <button
+                aria-pressed={day.key === selectedDateKey}
+                className={`h-[46px] rounded-full pt-[7px] text-center transition ${
+                  day.key === selectedDateKey ? "bg-ms-card text-ms-emphasis-blue shadow-sm" : "bg-white/40 text-ms-ink"
                 }`}
                 key={day.key}
+                onClick={() => setSelectedDateKey(day.key)}
+                type="button"
               >
                 <span className="block text-[10px] font-bold leading-none">{day.weekday}</span>
                 <span className="mt-[5px] block text-[15px] font-extrabold leading-none">{day.day}</span>
-              </div>
+              </button>
             ))}
           </div>
         </header>
@@ -377,7 +404,7 @@ export default function SharingTabPage() {
                   {primaryDog.invite_code}
                 </code>
                 <button
-                  className="flex items-center gap-[5px] rounded-full bg-ms-brand px-[12px] py-[7px] text-[12px] font-extrabold text-ms-on-brand disabled:opacity-60"
+                  className="flex items-center gap-[5px] rounded-full bg-ms-emphasis-blue px-[12px] py-[7px] text-[12px] font-extrabold text-white disabled:opacity-60"
                   disabled={!primaryDog.invite_code}
                   onClick={copyInviteCode}
                   type="button"
@@ -391,7 +418,7 @@ export default function SharingTabPage() {
         </section>
 
         {notice ? (
-          <div className="mx-[24px] mt-[14px] rounded-[16px] bg-ms-ok-bg px-[14px] py-[10px] text-[13px] font-bold text-ms-ok-fg">
+          <div className="mx-[24px] mt-[14px] rounded-[16px] bg-ms-badge-blue px-[14px] py-[10px] text-[13px] font-bold text-ms-emphasis-blue">
             {notice}
           </div>
         ) : null}
@@ -405,13 +432,15 @@ export default function SharingTabPage() {
         <section className="mt-[22px] px-[24px]">
           <div className="flex items-end justify-between">
             <div>
-              <p className="text-[13px] font-bold leading-none text-ms-emphasis-blue">오늘의 체크리스트</p>
+              <p className="text-[13px] font-bold leading-none text-ms-emphasis-blue">
+                {isViewingToday ? "오늘의 체크리스트" : "이 날의 체크리스트"}
+              </p>
               <h2 className="mt-[7px] text-[21px] font-extrabold leading-none">{primaryDog.name} 케어 현황</h2>
             </div>
             <button
               aria-expanded={editing}
               className={`rounded-full px-[10px] py-[6px] text-[12px] font-extrabold ${
-                editing ? "bg-ms-brand text-ms-on-brand" : "bg-ms-sunken text-ms-secondary"
+                editing ? "bg-ms-emphasis-blue text-white" : "bg-ms-sunken text-ms-secondary"
               }`}
               onClick={editing ? () => setEditing(false) : openEditor}
               type="button"
@@ -443,14 +472,21 @@ export default function SharingTabPage() {
                   </div>
                 ) : null}
 
-                <ManualSection kind="feed" onToggle={toggleTask} tasks={tasksByKind.feed} updatingTaskId={updatingTaskId} />
+                <ManualSection
+                  kind="feed"
+                  onNudge={sendNudge}
+                  onToggle={toggleTask}
+                  tasks={tasksByKind.feed}
+                  updatingTaskId={updatingTaskId}
+                />
                 <ManualSection
                   kind="medicine"
+                  onNudge={sendNudge}
                   onToggle={toggleTask}
                   tasks={tasksByKind.medicine}
                   updatingTaskId={updatingTaskId}
                 />
-                <WalkSection tasks={tasksByKind.walk} />
+                <WalkSection onNudge={sendNudge} tasks={tasksByKind.walk} />
               </>
             )}
           </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Footprints, LocateFixed, MapPin, RefreshCw, Route } from "lucide-react";
+import { PawPrint, LocateFixed, MapPin, RefreshCw, Route } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth-context";
 import { KakaoRouteMap } from "../kakao-route-map";
@@ -220,7 +220,7 @@ export function WalkTab() {
                   />
 
                   <button
-                    className="mt-[14px] flex h-[56px] w-full items-center justify-center gap-[10px] rounded-full bg-ms-action-green text-[15px] font-extrabold text-ms-on-green shadow-sm active:bg-ms-action-green-pressed disabled:opacity-60"
+                    className="mt-[14px] flex h-[56px] w-full items-center justify-center gap-[10px] rounded-full bg-ms-brand text-[15px] font-extrabold text-white shadow-sm active:opacity-90 disabled:opacity-60"
                     disabled={isBusy}
                     onClick={onPrimaryAction}
                     type="button"
@@ -228,7 +228,7 @@ export function WalkTab() {
                     {isBusy ? (
                       <RefreshCw className="animate-spin" size={18} />
                     ) : choice === "free" ? (
-                      <Footprints size={18} />
+                      <PawPrint size={18} />
                     ) : (
                       <Route size={18} />
                     )}
