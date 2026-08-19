@@ -398,7 +398,7 @@ export default function SharingTabPage() {
         </section>
 
         {notice ? (
-          <div className="mx-[24px] mt-[14px] rounded-[16px] bg-ms-ok-bg px-[14px] py-[10px] text-[13px] font-bold text-ms-ok-fg">
+          <div className="mx-[24px] mt-[14px] rounded-[16px] bg-ms-badge-blue px-[14px] py-[10px] text-[13px] font-bold text-ms-emphasis-blue">
             {notice}
           </div>
         ) : null}
@@ -420,7 +420,7 @@ export default function SharingTabPage() {
             <button
               aria-expanded={editing}
               className={`rounded-full px-[10px] py-[6px] text-[12px] font-extrabold ${
-                editing ? "bg-ms-brand text-ms-on-brand" : "bg-ms-sunken text-ms-secondary"
+                editing ? "bg-ms-emphasis-blue text-white" : "bg-ms-sunken text-ms-secondary"
               }`}
               onClick={editing ? () => setEditing(false) : openEditor}
               type="button"
