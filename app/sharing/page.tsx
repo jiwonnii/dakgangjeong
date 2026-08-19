@@ -299,9 +299,8 @@ export default function SharingTabPage() {
           className="px-[24px] pb-[18px] pt-[14px] text-ms-ink"
           style={{
             backgroundImage:
-              "radial-gradient(ellipse 240px 150px at 25% -8%, var(--p-ember-100) 0%, var(--p-ember-100) 25%, transparent 85%), " +
-              "radial-gradient(ellipse 270px 155px at 80% 18%, var(--p-periwinkle-300) 0%, var(--p-periwinkle-300) 25%, transparent 85%), " +
-              "radial-gradient(ellipse 230px 140px at 52% 10%, var(--p-mint-100) 0%, transparent 85%)",
+              "radial-gradient(ellipse 240px 150px at 25% -8%, color-mix(in srgb, var(--brand) 40%, white) 0%, transparent 85%), " +
+              "radial-gradient(ellipse 270px 155px at 80% 18%, color-mix(in srgb, var(--p-periwinkle-300) 50%, white) 0%, transparent 85%)",
             backgroundBlendMode: "screen"
           }}
         >
