@@ -1,4 +1,5 @@
-import { Check, Footprints, Lock, Pill, RotateCw, Save, Soup, UserRound } from "lucide-react";
+import { BellRing, Check, PawPrint, Lock, Pill, RotateCw, Save, UserRound } from "lucide-react";
+import { PetBowlIcon } from "../_components/PetBowlIcon";
 import type { CareTask } from "../lib/types";
 import {
   CARE_LABELS,
@@ -93,16 +94,18 @@ export function EditPanel({
 /** 밥/약 체크리스트. FE의 CareRow를 그대로 옮기되, 슬롯은 오늘 실제 태스크에서 온다. */
 export function ManualSection({
   kind,
+  onNudge,
   onToggle,
   tasks,
   updatingTaskId
 }: {
   kind: "feed" | "medicine";
+  onNudge: (task: CareTask) => Promise<void>;
   onToggle: (task: CareTask) => Promise<void>;
   tasks: CareTask[];
   updatingTaskId: string;
 }) {
-  const Icon = kind === "feed" ? Soup : Pill;
+  const Icon = kind === "feed" ? PetBowlIcon : Pill;
   const doneCount = tasks.filter((task) => task.status === "completed").length;
 
   return (
@@ -128,43 +131,58 @@ export function ManualSection({
               : "완료";
 
             return (
-              <button
-                aria-pressed={isChecked}
-                className={`flex h-[58px] w-full items-center gap-[12px] rounded-[20px] px-[16px] transition disabled:opacity-60 ${
+              <div
+                className={`flex h-[58px] w-full items-center gap-[8px] rounded-[20px] px-[16px] transition ${
                   isChecked ? "border border-ms-line bg-ms-card" : "bg-ms-sunken"
                 }`}
-                disabled={isUpdating}
                 key={task.id}
-                onClick={() => void onToggle(task)}
-                type="button"
               >
-                <span
-                  className={`grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full border-2 ${
-                    isChecked
-                      ? "border-ms-emphasis-blue bg-ms-emphasis-blue text-white"
-                      : "border-ms-line-strong bg-ms-card"
-                  }`}
+                <button
+                  aria-pressed={isChecked}
+                  className="flex flex-1 items-center gap-[12px] text-left disabled:opacity-60"
+                  disabled={isUpdating}
+                  onClick={() => void onToggle(task)}
+                  type="button"
                 >
-                  {isChecked ? <Check size={15} strokeWidth={3} /> : null}
-                </span>
-
-                <span className="flex-1 text-left">
                   <span
-                    className={`block text-[14px] font-extrabold ${
-                      isChecked ? "text-ms-muted line-through" : "text-ms-ink"
+                    className={`grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full border-2 ${
+                      isChecked
+                        ? "border-ms-emphasis-blue bg-ms-emphasis-blue text-white"
+                        : "border-ms-line-strong bg-ms-card"
                     }`}
                   >
-                    {taskBandLabel(task, tasks)}
+                    {isChecked ? <Check size={15} strokeWidth={3} /> : null}
                   </span>
-                  {isChecked ? (
-                    <span className="mt-[2px] block text-[11px] font-bold text-ms-muted">{doneLabel}</span>
-                  ) : null}
-                </span>
+
+                  <span className="flex-1 text-left">
+                    <span
+                      className={`block text-[14px] font-extrabold ${
+                        isChecked ? "text-ms-muted line-through" : "text-ms-ink"
+                      }`}
+                    >
+                      {taskBandLabel(task, tasks)}
+                    </span>
+                    {isChecked ? (
+                      <span className="mt-[2px] block text-[11px] font-bold text-ms-muted">{doneLabel}</span>
+                    ) : null}
+                  </span>
+                </button>
+
+                {!isChecked ? (
+                  <button
+                    aria-label="콕 찌르기"
+                    className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-ms-badge-blue text-ms-emphasis-blue active:opacity-70"
+                    onClick={() => void onNudge(task)}
+                    type="button"
+                  >
+                    <BellRing size={15} strokeWidth={2.2} />
+                  </button>
+                ) : null}
 
                 <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-ms-badge-blue text-ms-emphasis-blue">
                   <Icon size={16} strokeWidth={2.2} />
                 </span>
-              </button>
+              </div>
             );
           })
         )}
@@ -174,7 +192,13 @@ export function ManualSection({
 }
 
 /** 산책 진행률. 산책 태스크는 실제 산책이 기록되면 앱이 자동으로 완료 처리하므로 체크 UI가 없다. */
-export function WalkSection({ tasks }: { tasks: CareTask[] }) {
+export function WalkSection({
+  onNudge,
+  tasks
+}: {
+  onNudge: (task: CareTask) => Promise<void>;
+  tasks: CareTask[];
+}) {
   const done = tasks.filter((task) => task.status === "completed").length;
   const total = tasks.length;
 
@@ -198,7 +222,7 @@ export function WalkSection({ tasks }: { tasks: CareTask[] }) {
 
             return (
               <div
-                className={`flex h-[58px] w-full items-center gap-[12px] rounded-[20px] px-[16px] ${
+                className={`flex h-[58px] w-full items-center gap-[8px] rounded-[20px] px-[16px] ${
                   isChecked ? "border border-ms-line bg-ms-card" : "bg-ms-sunken opacity-70"
                 }`}
                 key={task.id}
@@ -221,8 +245,19 @@ export function WalkSection({ tasks }: { tasks: CareTask[] }) {
                   {taskBandLabel(task, tasks)}
                 </span>
 
+                {!isChecked ? (
+                  <button
+                    aria-label="콕 찌르기"
+                    className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-full bg-ms-badge-blue text-ms-emphasis-blue active:opacity-70"
+                    onClick={() => void onNudge(task)}
+                    type="button"
+                  >
+                    <BellRing size={15} strokeWidth={2.2} />
+                  </button>
+                ) : null}
+
                 <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-ms-badge-blue text-ms-emphasis-blue">
-                  <Footprints size={16} strokeWidth={2.2} />
+                  <PawPrint size={16} strokeWidth={2.2} />
                 </span>
               </div>
             );

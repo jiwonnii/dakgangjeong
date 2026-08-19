@@ -470,7 +470,7 @@ export function WalkRecorderPanel({
       </div>
 
       <button
-        className="mt-[12px] flex h-[56px] w-full items-center justify-center gap-[10px] rounded-full bg-ms-action-green text-[15px] font-extrabold text-ms-on-green shadow-sm active:bg-ms-action-green-pressed disabled:opacity-60"
+        className="mt-[12px] flex h-[56px] w-full items-center justify-center gap-[10px] rounded-full bg-ms-brand text-[15px] font-extrabold text-white shadow-sm active:opacity-90 disabled:opacity-60"
         disabled={walk.isSaving || isRunning}
         onClick={handleStart}
         type="button"

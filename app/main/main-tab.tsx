@@ -1,12 +1,13 @@
 "use client";
 
-import { Bell, CalendarCheck, ChevronRight, CloudSun, Footprints, Lock, Pill, Play, Utensils } from "lucide-react";
+import { Bell, CalendarCheck, ChevronRight, CloudSun, PawPrint, Lock, Pill, Play } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { PetBowlIcon } from "../_components/PetBowlIcon";
 import { useAuth } from "../auth-context";
 import { getApproximateCurrentOrigin } from "../lib/geolocation";
 import type { CareTodayResponse, WarningsResponse } from "../lib/types";
-import type { WalkRecord, WalkRecordListResponse } from "../records/record-utils";
+import type { StreakResponse, WalkRecord, WalkRecordListResponse } from "../records/record-utils";
 import { kstDateKeyFromIso, toDateKey } from "../records/record-utils";
 
 // 적정 산책 범위(km). 강아지별 맞춤 범위를 계산해 주는 엔드포인트가 아직
@@ -197,6 +198,7 @@ export function MainTab() {
   const [care, setCare] = useState<CareTodayResponse | null>(null);
 
   const [records, setRecords] = useState<WalkRecord[]>([]);
+  const [streak, setStreak] = useState<StreakResponse | null>(null);
 
   const [summarySlide, setSummarySlide] = useState(0);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
@@ -295,6 +297,30 @@ export function MainTab() {
     };
   }, [api, dogId]);
 
+  useEffect(() => {
+    if (!dogId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    api<StreakResponse>(`/api/walk-records/streak?dogId=${encodeURIComponent(dogId)}`)
+      .then((payload) => {
+        if (!cancelled) {
+          setStreak(payload);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setStreak(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [api, dogId]);
+
   const week = useMemo(() => {
     const days = buildTrailingWeek();
     const byDateKey = new Map(days.map((day) => [day.dateKey, day]));
@@ -343,7 +369,7 @@ export function MainTab() {
       return {
         taskType,
         label: taskType === "feed" ? "밥" : "약",
-        icon: taskType === "feed" ? Utensils : Pill,
+        icon: taskType === "feed" ? PetBowlIcon : Pill,
         done,
         total,
         detail: total === 0 ? "등록된 일정이 없어요" : done >= total ? "완료" : `${total - done}회 남음`
@@ -525,7 +551,7 @@ export function MainTab() {
             {/* 산책 타일: 최근 5일 실제 산책 횟수를 캡슐 5개로 보여준다 */}
             <li className="h-[148px] rounded-[18px] border border-ms-line bg-ms-card p-[16px] shadow-sm">
               <div className="flex items-start justify-between">
-                <Footprints className="text-ms-secondary" size={19} strokeWidth={2} />
+                <PawPrint className="text-ms-secondary" size={19} strokeWidth={2} />
                 <span className="rounded-full bg-ms-ok-bg px-[9px] py-[4px] text-[12px] font-bold text-ms-ok-fg">
                   {last5Days[last5Days.length - 1]?.walkCount ?? 0}회
                 </span>
@@ -574,6 +600,33 @@ export function MainTab() {
                 </li>
               );
             })}
+
+            <li
+              className="relative flex h-[148px] flex-col items-center justify-center gap-[10px] overflow-hidden rounded-[18px] shadow-sm"
+              style={{
+                backgroundImage:
+                  "radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--brand) 28%, white) 0%, var(--p-white) 55%)"
+              }}
+            >
+              <span
+                aria-hidden="true"
+                className="block h-[34px] w-[34px]"
+                style={{
+                  backgroundColor: "var(--brand)",
+                  WebkitMaskImage: "url(/불꽃.png)",
+                  maskImage: "url(/불꽃.png)",
+                  WebkitMaskSize: "contain",
+                  maskSize: "contain",
+                  WebkitMaskRepeat: "no-repeat",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  maskPosition: "center"
+                }}
+              />
+              <p className="text-[14px] font-extrabold leading-none text-ms-ink">
+                {streak?.streakDays ?? 0}일 연속 달성
+              </p>
+            </li>
           </ul>
 
           {tags.length > 0 ? (

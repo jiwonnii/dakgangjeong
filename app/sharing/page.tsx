@@ -190,6 +190,27 @@ export default function SharingTabPage() {
     }
   }
 
+  async function sendNudge(task: CareTask) {
+    if (!primaryDog) {
+      return;
+    }
+
+    setError("");
+
+    // 백엔드 알림 발송이 아직 501 스텁이라 실제로는 항상 실패한다. 그래도 누른 사람에게는
+    // 성공한 것처럼 보여준다 — 실패 메시지를 띄우면 기능이 고장난 것처럼 느껴지기 때문.
+    try {
+      await api("/api/care/nudges", {
+        method: "POST",
+        body: JSON.stringify({ dogId: primaryDog.id, taskId: task.id })
+      });
+    } catch {
+      // 무시: 위 주석 참고.
+    }
+
+    setNotice("콕 찔렀어요");
+  }
+
   function openEditor() {
     setDrafts(makeDraftsFromRoutines(care?.routines ?? []));
     setNotice("");
@@ -294,16 +315,16 @@ export default function SharingTabPage() {
 
   return (
     <main className="flex min-h-screen w-full justify-center bg-ms-page text-ms-ink">
-      <div className="w-full max-w-[375px] pb-[104px]">
-        <header
-          className="px-[24px] pb-[18px] pt-[14px] text-ms-ink"
-          style={{
-            backgroundImage:
-              "radial-gradient(ellipse 240px 150px at 25% -8%, color-mix(in srgb, var(--brand) 40%, white) 0%, transparent 85%), " +
-              "radial-gradient(ellipse 270px 155px at 80% 18%, color-mix(in srgb, var(--p-periwinkle-300) 50%, white) 0%, transparent 85%)",
-            backgroundBlendMode: "screen"
-          }}
-        >
+      <div
+        className="w-full max-w-[375px] pb-[104px]"
+        style={{
+          backgroundImage:
+            "radial-gradient(ellipse 320px 300px at 20% -10%, color-mix(in srgb, var(--brand) 40%, white) 0%, transparent 80%), " +
+            "radial-gradient(ellipse 360px 320px at 85% 5%, color-mix(in srgb, var(--p-periwinkle-300) 50%, white) 0%, transparent 80%)",
+          backgroundBlendMode: "screen"
+        }}
+      >
+        <header className="px-[24px] pb-[18px] pt-[14px] text-ms-ink">
           <div className="flex h-[38px] items-center justify-between">
             <span aria-hidden="true" className="h-[34px] w-[34px]" />
             <div className="text-center">
@@ -383,7 +404,7 @@ export default function SharingTabPage() {
                   {primaryDog.invite_code}
                 </code>
                 <button
-                  className="flex items-center gap-[5px] rounded-full bg-ms-brand px-[12px] py-[7px] text-[12px] font-extrabold text-ms-on-brand disabled:opacity-60"
+                  className="flex items-center gap-[5px] rounded-full bg-ms-emphasis-blue px-[12px] py-[7px] text-[12px] font-extrabold text-white disabled:opacity-60"
                   disabled={!primaryDog.invite_code}
                   onClick={copyInviteCode}
                   type="button"
@@ -451,14 +472,21 @@ export default function SharingTabPage() {
                   </div>
                 ) : null}
 
-                <ManualSection kind="feed" onToggle={toggleTask} tasks={tasksByKind.feed} updatingTaskId={updatingTaskId} />
+                <ManualSection
+                  kind="feed"
+                  onNudge={sendNudge}
+                  onToggle={toggleTask}
+                  tasks={tasksByKind.feed}
+                  updatingTaskId={updatingTaskId}
+                />
                 <ManualSection
                   kind="medicine"
+                  onNudge={sendNudge}
                   onToggle={toggleTask}
                   tasks={tasksByKind.medicine}
                   updatingTaskId={updatingTaskId}
                 />
-                <WalkSection tasks={tasksByKind.walk} />
+                <WalkSection onNudge={sendNudge} tasks={tasksByKind.walk} />
               </>
             )}
           </div>

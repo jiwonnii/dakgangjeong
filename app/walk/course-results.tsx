@@ -61,34 +61,45 @@ export function CourseResults({
 
           return (
             <button
-              className={`grid gap-[10px] rounded-[18px] p-[16px] text-left shadow-sm transition ${
-                isSelected ? "bg-ms-action-green" : "border border-ms-line bg-ms-card"
+              className={`grid gap-[10px] rounded-[18px] p-[16px] text-left transition ${
+                isSelected ? "border border-ms-brand" : "border border-transparent bg-ms-sunken"
               }`}
               key={course.rank}
               onClick={() => onSelectRank(course.rank)}
+              style={isSelected ? { backgroundColor: "color-mix(in srgb, var(--brand) 12%, white)" } : undefined}
               type="button"
             >
               <div className="flex items-center justify-between gap-[10px]">
-                <strong
-                  className={`text-[15px] font-extrabold ${isSelected ? "text-ms-on-green" : "text-ms-ink"}`}
-                  title={`${course.direction} 방향`}
-                >
-                  {course.rank}순위 · {course.courseName ?? course.direction}
-                </strong>
+                <div className="flex items-center gap-[10px]">
+                  <strong
+                    className={`text-[15px] font-extrabold ${isSelected ? "text-ms-brand" : "text-ms-ink"}`}
+                    title={`${course.direction} 방향`}
+                  >
+                    {course.rank}순위 · {course.courseName ?? course.direction}
+                  </strong>
+                  <span
+                    className={`shrink-0 rounded-full px-[10px] py-[5px] text-[11px] font-extrabold ${
+                      isSelected ? "bg-white text-ms-brand" : "bg-ms-card text-ms-emphasis-green"
+                    }`}
+                  >
+                    {course.score}점
+                  </span>
+                </div>
                 <span
-                  className={`shrink-0 rounded-full px-[10px] py-[5px] text-[11px] font-extrabold ${
-                    isSelected ? "bg-ms-action-green-pressed text-ms-on-green" : "bg-ms-sunken text-ms-emphasis-green"
+                  aria-hidden="true"
+                  className={`grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full border-2 ${
+                    isSelected ? "border-ms-brand" : "border-ms-line-strong"
                   }`}
                 >
-                  {course.score}점
+                  {isSelected ? <span className="h-[10px] w-[10px] rounded-full bg-ms-brand" /> : null}
                 </span>
               </div>
-              <p className={`text-[12px] font-semibold ${isSelected ? "text-ms-on-green" : "text-ms-secondary"}`}>
+              <p className={`text-[12px] font-semibold ${isSelected ? "text-ms-brand" : "text-ms-secondary"}`}>
                 {course.aiExplanation ?? course.explanation?.summary}
               </p>
               <div
                 className={`grid grid-cols-2 gap-[8px] text-[12px] font-bold sm:grid-cols-4 ${
-                  isSelected ? "text-ms-on-green" : "text-ms-ink"
+                  isSelected ? "text-ms-brand" : "text-ms-ink"
                 }`}
               >
                 <span>{formatMeters(course.distanceMeters)}</span>
