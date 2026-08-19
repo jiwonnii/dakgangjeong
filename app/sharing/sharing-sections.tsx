@@ -43,7 +43,7 @@ export function EditPanel({
                     <button
                       aria-pressed={isSelected}
                       className={`h-[32px] rounded-full px-[11px] text-[12px] font-extrabold transition ${
-                        isSelected ? "bg-ms-brand text-ms-on-brand" : "bg-ms-card text-ms-secondary"
+                        isSelected ? "bg-ms-emphasis-blue text-white" : "bg-ms-card text-ms-secondary"
                       }`}
                       key={count}
                       onClick={() => onCountChange(kind, count)}
@@ -78,7 +78,7 @@ export function EditPanel({
       </div>
 
       <button
-        className="mt-[14px] flex h-[46px] w-full items-center justify-center gap-[8px] rounded-full bg-ms-brand text-[14px] font-extrabold text-ms-on-brand transition active:bg-ms-brand-pressed disabled:opacity-60"
+        className="mt-[14px] flex h-[46px] w-full items-center justify-center gap-[8px] rounded-full bg-ms-emphasis-blue text-[14px] font-extrabold text-white transition active:opacity-90 disabled:opacity-60"
         disabled={isSaving}
         onClick={() => void onSave()}
         type="button"
