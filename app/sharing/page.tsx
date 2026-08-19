@@ -291,7 +291,16 @@ export default function SharingTabPage() {
   return (
     <main className="flex min-h-screen w-full justify-center bg-ms-page text-ms-ink">
       <div className="w-full max-w-[375px] pb-[104px]">
-        <header className="rounded-b-[24px] bg-ms-action-green px-[24px] pb-[18px] pt-[14px] text-ms-on-green">
+        <header
+          className="px-[24px] pb-[18px] pt-[14px] text-ms-ink"
+          style={{
+            backgroundImage:
+              "radial-gradient(ellipse 240px 150px at 25% -8%, var(--p-ember-100) 0%, var(--p-ember-100) 25%, transparent 85%), " +
+              "radial-gradient(ellipse 270px 155px at 80% 18%, var(--p-periwinkle-300) 0%, var(--p-periwinkle-300) 25%, transparent 85%), " +
+              "radial-gradient(ellipse 230px 140px at 52% 10%, var(--p-mint-100) 0%, transparent 85%)",
+            backgroundBlendMode: "screen"
+          }}
+        >
           <div className="flex h-[38px] items-center justify-between">
             <span aria-hidden="true" className="h-[34px] w-[34px]" />
             <div className="text-center">
@@ -302,7 +311,7 @@ export default function SharingTabPage() {
               <button
                 aria-expanded={isNotificationOpen}
                 aria-label="공유 알림"
-                className="relative grid h-[34px] w-[34px] place-items-center rounded-full bg-ms-action-green-pressed"
+                className="relative grid h-[34px] w-[34px] place-items-center rounded-full bg-white/40"
                 onClick={() => setIsNotificationOpen((value) => !value)}
                 type="button"
               >
@@ -325,7 +334,7 @@ export default function SharingTabPage() {
                 {formatCareHeaderDate(care?.date)}
               </p>
             </div>
-            <span className="rounded-full bg-ms-card px-[10px] py-[6px] text-[11px] font-extrabold text-ms-emphasis-green">
+            <span className="rounded-full bg-ms-badge-blue px-[10px] py-[6px] text-[11px] font-extrabold text-ms-emphasis-blue">
               오늘 {todayDoneCount}/{todayTaskCount}
             </span>
           </div>
@@ -333,8 +342,8 @@ export default function SharingTabPage() {
           <div className="mt-[13px] grid grid-cols-7 gap-[5px]">
             {weekStrip.map((day) => (
               <div
-                className={`h-[46px] rounded-[13px] pt-[7px] text-center ${
-                  day.isToday ? "bg-ms-card text-ms-emphasis-green" : "bg-ms-action-green-pressed text-ms-on-green"
+                className={`h-[46px] rounded-full pt-[7px] text-center ${
+                  day.isToday ? "bg-ms-card text-ms-emphasis-blue shadow-sm" : "bg-white/40 text-ms-ink"
                 }`}
                 key={day.key}
               >
@@ -396,7 +405,7 @@ export default function SharingTabPage() {
         <section className="mt-[22px] px-[24px]">
           <div className="flex items-end justify-between">
             <div>
-              <p className="text-[13px] font-bold leading-none text-ms-emphasis-green">오늘의 체크리스트</p>
+              <p className="text-[13px] font-bold leading-none text-ms-emphasis-blue">오늘의 체크리스트</p>
               <h2 className="mt-[7px] text-[21px] font-extrabold leading-none">{primaryDog.name} 케어 현황</h2>
             </div>
             <button
@@ -411,7 +420,7 @@ export default function SharingTabPage() {
             </button>
           </div>
 
-          <div className="mt-[14px] space-y-[10px]">
+          <div className="mt-[14px] space-y-[20px]">
             {editing ? (
               <EditPanel
                 drafts={drafts}
