@@ -91,9 +91,9 @@
   --map-route-casing: var(--p-white);
   --map-marker: var(--p-orange-600);
 
-  --band-fill-top: var(--p-green-600);
+  --band-fill-top: var(--p-forest-700);
   --band-fill-bottom: var(--p-green-400);
-  --band-fill-solid: var(--p-green-500);
+  --band-fill-solid: var(--p-green-600);
   --band-line: var(--p-ink);
   --band-point: var(--p-white);
 

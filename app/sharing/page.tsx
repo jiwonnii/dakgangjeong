@@ -31,8 +31,9 @@ function toDateKeyLocal(date: Date) {
 }
 
 /**
- * FE 디자인의 요일 선택 스트립은 임의의 날짜를 조회하는 백엔드가 없어 그대로 옮길 수 없다.
- * 대신 실제 이번 주(월~일)를 계산해 "오늘"만 표시하고, 클릭은 받지 않는 장식용 스트립으로 둔다.
+ * 실제(오늘 기준) 이번 주(월~일)를 계산한다. 요일을 눌러도 이 스트립 자체는 움직이지 않고,
+ * 어떤 날이 선택됐는지만 페이지에서 별도로 표시한다 — `GET /api/care/today`가 `date` 쿼리를
+ * 지원하므로 과거/미래 날짜 조회는 실제로 가능하다.
  */
 function buildWeekStrip(todayKey: string | undefined) {
   const base = todayKey ? new Date(`${todayKey}T00:00:00`) : new Date();
@@ -99,6 +100,10 @@ export default function SharingTabPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [updatingTaskId, setUpdatingTaskId] = useState("");
+  const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKeyLocal(new Date()));
+
+  const todayKey = useMemo(() => toDateKeyLocal(new Date()), []);
+  const isViewingToday = selectedDateKey === todayKey;
 
   const loadCare = useCallback(async () => {
     if (!primaryDog) {
@@ -109,17 +114,16 @@ export default function SharingTabPage() {
     setError("");
 
     try {
-      const payload = await api<CareTodayResponse>(
-        `/api/care/today?dogId=${encodeURIComponent(primaryDog.id)}`
-      );
+      const query = new URLSearchParams({ dogId: primaryDog.id, date: selectedDateKey });
+      const payload = await api<CareTodayResponse>(`/api/care/today?${query.toString()}`);
       setCare(payload);
       setDrafts(makeDraftsFromRoutines(payload.routines));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "오늘 체크리스트를 불러오지 못했어요.");
+      setError(err instanceof Error ? err.message : "체크리스트를 불러오지 못했어요.");
     } finally {
       setIsLoading(false);
     }
-  }, [api, primaryDog]);
+  }, [api, primaryDog, selectedDateKey]);
 
   useEffect(() => {
     void loadCare();
@@ -153,7 +157,7 @@ export default function SharingTabPage() {
     );
   }, [care]);
 
-  const weekStrip = useMemo(() => buildWeekStrip(care?.date), [care?.date]);
+  const weekStrip = useMemo(() => buildWeekStrip(todayKey), [todayKey]);
   const todayTaskCount = tasksByKind.feed.length + tasksByKind.medicine.length + tasksByKind.walk.length;
   const todayDoneCount = useMemo(
     () =>
@@ -335,21 +339,24 @@ export default function SharingTabPage() {
               </p>
             </div>
             <span className="rounded-full bg-ms-badge-blue px-[10px] py-[6px] text-[11px] font-extrabold text-ms-emphasis-blue">
-              오늘 {todayDoneCount}/{todayTaskCount}
+              {isViewingToday ? "오늘" : "완료"} {todayDoneCount}/{todayTaskCount}
             </span>
           </div>
 
           <div className="mt-[13px] grid grid-cols-7 gap-[5px]">
             {weekStrip.map((day) => (
-              <div
-                className={`h-[46px] rounded-full pt-[7px] text-center ${
-                  day.isToday ? "bg-ms-card text-ms-emphasis-blue shadow-sm" : "bg-white/40 text-ms-ink"
+              <button
+                aria-pressed={day.key === selectedDateKey}
+                className={`h-[46px] rounded-full pt-[7px] text-center transition ${
+                  day.key === selectedDateKey ? "bg-ms-card text-ms-emphasis-blue shadow-sm" : "bg-white/40 text-ms-ink"
                 }`}
                 key={day.key}
+                onClick={() => setSelectedDateKey(day.key)}
+                type="button"
               >
                 <span className="block text-[10px] font-bold leading-none">{day.weekday}</span>
                 <span className="mt-[5px] block text-[15px] font-extrabold leading-none">{day.day}</span>
-              </div>
+              </button>
             ))}
           </div>
         </header>
@@ -405,7 +412,9 @@ export default function SharingTabPage() {
         <section className="mt-[22px] px-[24px]">
           <div className="flex items-end justify-between">
             <div>
-              <p className="text-[13px] font-bold leading-none text-ms-emphasis-blue">오늘의 체크리스트</p>
+              <p className="text-[13px] font-bold leading-none text-ms-emphasis-blue">
+                {isViewingToday ? "오늘의 체크리스트" : "이 날의 체크리스트"}
+              </p>
               <h2 className="mt-[7px] text-[21px] font-extrabold leading-none">{primaryDog.name} 케어 현황</h2>
             </div>
             <button

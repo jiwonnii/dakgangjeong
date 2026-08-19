@@ -1,4 +1,4 @@
-import { Check, Footprints, Pill, RotateCw, Save, Soup, UserRound } from "lucide-react";
+import { Check, Footprints, Lock, Pill, RotateCw, Save, Soup, UserRound } from "lucide-react";
 import type { CareTask } from "../lib/types";
 import {
   CARE_LABELS,
@@ -199,18 +199,18 @@ export function WalkSection({ tasks }: { tasks: CareTask[] }) {
             return (
               <div
                 className={`flex h-[58px] w-full items-center gap-[12px] rounded-[20px] px-[16px] ${
-                  isChecked ? "border border-ms-line bg-ms-card" : "bg-ms-sunken"
+                  isChecked ? "border border-ms-line bg-ms-card" : "bg-ms-sunken opacity-70"
                 }`}
                 key={task.id}
               >
                 <span
-                  className={`grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full border-2 ${
+                  className={`grid h-[26px] w-[26px] shrink-0 place-items-center rounded-full ${
                     isChecked
-                      ? "border-ms-emphasis-blue bg-ms-emphasis-blue text-white"
-                      : "border-ms-line-strong bg-ms-card"
+                      ? "border-2 border-ms-emphasis-blue bg-ms-emphasis-blue text-white"
+                      : "border border-dashed border-ms-line-strong bg-transparent text-ms-muted"
                   }`}
                 >
-                  {isChecked ? <Check size={15} strokeWidth={3} /> : null}
+                  {isChecked ? <Check size={15} strokeWidth={3} /> : <Lock size={11} strokeWidth={2.4} />}
                 </span>
 
                 <span
