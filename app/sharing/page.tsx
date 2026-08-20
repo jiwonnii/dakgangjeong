@@ -11,7 +11,6 @@ import {
   CARE_TITLES,
   defaultDrafts,
   millisecondsUntilNextKstMidnight,
-  nextKstDateKey,
   SHARING_CARE_KINDS,
   sortTasks,
   type RoutineDraft,
@@ -270,7 +269,7 @@ export default function SharingTabPage() {
       return;
     }
 
-    const startDate = nextKstDateKey(1);
+    const startDate = selectedDateKey >= todayKey ? selectedDateKey : todayKey;
     setIsSaving(true);
     setError("");
 
@@ -298,9 +297,14 @@ export default function SharingTabPage() {
         });
       }
 
-      setNotice("내일부터 적용돼요");
+      setNotice(startDate === todayKey ? "저장했어요" : `${formatCareHeaderDate(startDate)}부터 적용돼요`);
       setEditing(false);
-      await loadCare();
+
+      if (selectedDateKey !== startDate) {
+        setSelectedDateKey(startDate);
+      } else {
+        await loadCare();
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "루틴을 저장하지 못했어요.");
     } finally {
