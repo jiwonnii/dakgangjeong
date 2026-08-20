@@ -7,12 +7,20 @@ import type { LatLon, PetFacility, RecommendedCourse } from "./lib/types";
 const COURSE_COLORS = ["#2d7051", "#2f6fd6", "#c07a1a"];
 const FACILITY_MARKER_STYLES: Record<
   PetFacility["facilityType"],
-  { label: string; background: string; color: string; border: string }
+  { background: string; color: string; border: string }
 > = {
-  hospital: { label: "병", background: "#fff1f2", color: "#be123c", border: "#fb7185" },
-  grooming: { label: "미", background: "#eff6ff", color: "#1d4ed8", border: "#60a5fa" },
-  cafe: { label: "카", background: "#f7fee7", color: "#3f6212", border: "#a3e635" },
-  other: { label: "펫", background: "#f8fafc", color: "#334155", border: "#94a3b8" }
+  hospital: { background: "#fff1f2", color: "#be123c", border: "#fb7185" },
+  grooming: { background: "#eff6ff", color: "#1d4ed8", border: "#60a5fa" },
+  cafe: { background: "#f7fee7", color: "#3f6212", border: "#a3e635" },
+  other: { background: "#f8fafc", color: "#334155", border: "#94a3b8" }
+};
+
+// 시설 유형별 아이콘. 배경을 제거한 실제 이미지(public/*.png)를 그대로 쓴다.
+const FACILITY_ICON_SRC: Record<PetFacility["facilityType"], string> = {
+  hospital: "/병원배경제거.png",
+  grooming: "/미용실배경제거.png",
+  cafe: "/카페배경제거.png",
+  other: "/기타배경제거.png"
 };
 
 function createFacilityOverlayContent(facility: PetFacility) {
@@ -21,23 +29,22 @@ function createFacilityOverlayContent(facility: PetFacility) {
   wrapper.style.cssText = [
     "display:flex",
     "align-items:center",
-    "gap:4px",
-    "height:28px",
-    "max-width:112px",
-    "padding:0 8px",
+    "justify-content:center",
+    "width:30px",
+    "height:30px",
     "border-radius:999px",
     `border:1px solid ${style.border}`,
     `background:${style.background}`,
-    `color:${style.color}`,
-    "font-size:11px",
-    "font-weight:800",
-    "line-height:1",
     "box-shadow:0 2px 8px rgba(15,23,42,0.14)",
-    "white-space:nowrap",
     "pointer-events:none"
   ].join(";");
   wrapper.title = facility.name;
-  wrapper.textContent = style.label;
+
+  const icon = document.createElement("img");
+  icon.src = FACILITY_ICON_SRC[facility.facilityType];
+  icon.alt = "";
+  icon.style.cssText = "width:18px;height:18px;object-fit:contain";
+  wrapper.appendChild(icon);
 
   return wrapper;
 }

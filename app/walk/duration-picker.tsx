@@ -1,6 +1,5 @@
 "use client";
 
-import { PawPrint, SlidersHorizontal, Sparkles, TimerReset, type LucideIcon } from "lucide-react";
 import type { DurationOptions } from "../lib/types";
 
 export type DurationChoice = "minimum" | "recommended" | "custom" | "free";
@@ -10,11 +9,11 @@ export const CUSTOM_MIN_MINUTES = 20;
 export const CUSTOM_MAX_MINUTES = 240;
 export const CUSTOM_STEP_MINUTES = 10;
 
-const CARD_ICONS: Record<DurationChoice, LucideIcon> = {
-  minimum: TimerReset,
-  recommended: Sparkles,
-  custom: SlidersHorizontal,
-  free: PawPrint
+const CARD_ABBREVIATIONS: Record<DurationChoice, string> = {
+  minimum: "MIN",
+  recommended: "REC",
+  custom: "SET",
+  free: "FREE"
 };
 
 function formatMinutes(minutes: number) {
@@ -78,7 +77,6 @@ export function DurationPicker({
       {/* 선택 표시는 체크마크나 링이 아니라 색으로 — meoksa_FE WalkScreen 규칙 그대로 */}
       <div className="mt-[10px] grid grid-cols-2 gap-[10px]">
         {cards.map((card) => {
-          const Icon = CARD_ICONS[card.value];
           const isSelected = choice === card.value;
 
           return (
@@ -94,11 +92,11 @@ export function DurationPicker({
             >
               <div className="flex items-start justify-between">
                 <span
-                  className={`grid h-[32px] w-[32px] place-items-center rounded-[11px] ${
-                    isSelected ? "bg-white text-ms-brand" : "bg-ms-card text-ms-emphasis-green"
+                  className={`text-[13px] font-extrabold leading-none tracking-[0.02em] ${
+                    isSelected ? "text-ms-brand" : "text-ms-emphasis-green"
                   }`}
                 >
-                  <Icon size={17} strokeWidth={2.2} />
+                  {CARD_ABBREVIATIONS[card.value]}
                 </span>
                 <span className="flex items-center gap-[6px]">
                   <span
