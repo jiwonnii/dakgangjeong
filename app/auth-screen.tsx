@@ -15,8 +15,11 @@ export function AuthScreen() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [isBusy, setIsBusy] = useState(false);
+  // 로고가 가운데 도착하면 아래 UI가 뒤따라 떠오른다
+  const [hasLanded, setHasLanded] = useState(false);
 
   const isSignIn = mode === "signIn";
+  const riseStyle = hasLanded ? { animation: "welcome-rise 0.5s ease-out both" } : undefined;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -49,13 +52,22 @@ export function AuthScreen() {
   return (
     <main className="flex min-h-screen w-full justify-center overflow-x-hidden bg-ms-page text-ms-ink">
       <section className="flex min-h-screen w-[min(100vw,375px)] max-w-[375px] flex-col pb-8">
-        <WelcomeHero />
+        <WelcomeHero onArrive={() => setHasLanded(true)} />
 
-        <h1 className="mt-8 text-center text-[26px] font-extrabold leading-none text-ms-emphasis-blue">
-          {isSignIn ? "산책하게" : "가입하기"}
+        <h1
+          className={`mt-8 text-center text-[26px] font-extrabold leading-none text-ms-emphasis-blue ${
+            hasLanded ? "" : "opacity-0"
+          }`}
+          style={riseStyle}
+        >
+          {isSignIn ? "산책하개" : "가입하기"}
         </h1>
 
-        <form className="mt-10 flex flex-col gap-5 px-6" onSubmit={handleSubmit}>
+        <form
+          className={`mt-10 flex flex-col gap-5 px-6 ${hasLanded ? "" : "opacity-0"}`}
+          onSubmit={handleSubmit}
+          style={riseStyle ? { ...riseStyle, animationDelay: "0.1s" } : undefined}
+        >
           <div className="overflow-hidden rounded-[24px] bg-ms-card shadow-lg">
             <input
               className="h-[56px] w-full bg-transparent px-5 text-[16px] font-semibold text-ms-ink outline-none placeholder:text-ms-muted"

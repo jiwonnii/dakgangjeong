@@ -57,107 +57,40 @@ textarea {
   }
 }
 
-/* 로그인 전 웰컴 히어로. 로고 주위로 산책 소품 아이콘들이 각자 다른 리듬으로 떠다닌다. */
+/* 로그인 전 웰컴 히어로. 로고가 오른쪽 밖에서 통통 튀어 들어와 가운데서 멈춘다.
+   튀어 들어오는 동작 자체는 WelcomeHero.tsx에서 매 프레임 계산한다.
+   여기 있는 둘은 도착 이후의 정지 상태 연출이다. */
 @keyframes welcome-hero-pulse-ring {
   0%,
   100% {
     transform: scale(0.92);
-    opacity: 0.55;
+    opacity: 0.5;
   }
   50% {
-    transform: scale(1.14);
-    opacity: 0.95;
+    transform: scale(1.08);
+    opacity: 0.85;
   }
 }
 
 @keyframes welcome-hero-breathe {
   0%,
   100% {
-    transform: scale(1);
+    transform: scale(1, 1);
   }
   50% {
-    transform: scale(1.045);
+    transform: scale(1.03, 1.035);
   }
 }
 
-@keyframes welcome-hero-float-a {
-  0%,
-  100% {
-    transform: translate(0, 0) rotate(-4deg);
-  }
-  50% {
-    transform: translate(-2px, -13px) rotate(3deg);
-  }
-}
-
-@keyframes welcome-hero-float-b {
-  0%,
-  100% {
-    transform: translate(0, 0) rotate(4deg);
-  }
-  50% {
-    transform: translate(2px, -10px) rotate(-4deg);
-  }
-}
-
-@keyframes welcome-hero-float-c {
-  0%,
-  100% {
-    transform: translate(0, -4px) rotate(0deg);
-  }
-  50% {
-    transform: translate(-2px, 10px) rotate(4deg);
-  }
-}
-
-@keyframes welcome-hero-float-d {
-  0%,
-  100% {
-    transform: translate(0, 6px) rotate(-3deg);
-  }
-  50% {
-    transform: translate(2px, -8px) rotate(4deg);
-  }
-}
-
-@keyframes welcome-hero-drift {
-  0%,
-  100% {
-    transform: translate(0, 0) rotate(0deg);
-  }
-  50% {
-    transform: translate(2px, -6px) rotate(-4deg);
-  }
-}
-
-@keyframes welcome-hero-drift-sun {
-  0%,
-  100% {
-    transform: translate(0, 0);
-  }
-  50% {
-    transform: translate(-2px, -9px);
-  }
-}
-
-@keyframes welcome-hero-spin-y {
+/* 로고 도착에 맞춰 아래 UI가 떠오른다 */
+@keyframes welcome-rise {
   from {
-    transform: rotateY(0deg);
+    opacity: 0;
+    transform: translateY(9px);
   }
   to {
-    transform: rotateY(-360deg);
-  }
-}
-
-@keyframes welcome-hero-sparkle {
-  0%,
-  100% {
-    opacity: 0;
-    transform: scale(0.5) rotate(0deg);
-  }
-  50% {
     opacity: 1;
-    transform: scale(1) rotate(25deg);
+    transform: translateY(0);
   }
 }
 
@@ -175,51 +108,9 @@ textarea {
       transform: none;
     }
   }
-  @keyframes welcome-hero-float-a {
-    0%,
-    100% {
-      transform: none;
-    }
-  }
-  @keyframes welcome-hero-float-b {
-    0%,
-    100% {
-      transform: none;
-    }
-  }
-  @keyframes welcome-hero-float-c {
-    0%,
-    100% {
-      transform: none;
-    }
-  }
-  @keyframes welcome-hero-float-d {
-    0%,
-    100% {
-      transform: none;
-    }
-  }
-  @keyframes welcome-hero-drift {
-    0%,
-    100% {
-      transform: none;
-    }
-  }
-  @keyframes welcome-hero-drift-sun {
-    0%,
-    100% {
-      transform: none;
-    }
-  }
-  @keyframes welcome-hero-spin-y {
-    0%,
-    100% {
-      transform: none;
-    }
-  }
-  @keyframes welcome-hero-sparkle {
-    0%,
-    100% {
+  @keyframes welcome-rise {
+    from,
+    to {
       opacity: 1;
       transform: none;
     }
