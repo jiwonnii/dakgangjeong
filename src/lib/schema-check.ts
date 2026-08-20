@@ -202,6 +202,23 @@ export const expectedSchema: SchemaExpectation[] = [
     migration: "migrations/0003_walk_recommendation.sql"
   },
   {
+    table: "notifications",
+    columns: [
+      "id",
+      "dog_id",
+      "recipient_user_id",
+      "actor_user_id",
+      "type",
+      "title",
+      "message",
+      "metadata",
+      "dedupe_key",
+      "read_at",
+      "created_at"
+    ],
+    migration: "migrations/0014_notifications_and_pet_facility_lookup.sql"
+  },
+  {
     table: "breed_exercise",
     columns: [
       "breed_id",

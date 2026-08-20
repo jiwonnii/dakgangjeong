@@ -139,16 +139,19 @@ export function WalkRecorderPanel({
   const savedRoute = useMemo(() => routeGeoJsonToPolyline(walk.serverRecord?.routeGeoJson ?? null), [walk.serverRecord?.routeGeoJson]);
   const selectedCourseRoute = useMemo(() => coursePathToPolyline(selectedCourse), [selectedCourse]);
   const reviewFactors = useMemo(() => selectedCourse?.explanation?.factors ?? [], [selectedCourse]);
-  const previewPoints = useMemo(
-    () => (walk.polyline.length > 0 ? walk.polyline : savedRoute.length > 0 ? savedRoute : selectedCourseRoute),
-    [savedRoute, selectedCourseRoute, walk.polyline]
+  const actualRoutePoints = useMemo(
+    () => (walk.polyline.length > 0 ? walk.polyline : savedRoute),
+    [savedRoute, walk.polyline]
   );
+  const previewPoints = actualRoutePoints.length > 0 ? actualRoutePoints : selectedCourseRoute;
   const mapFallbackCenter = previewPoints[0] ?? DEFAULT_MAP_CENTER;
   const mapCaption =
     walk.polyline.length > 0
-      ? "실제 GPS 이동 경로를 표시하고 있어요."
+      ? selectedCourseRoute.length > 0
+        ? "점선은 추천 경로, 초록 선은 실제 GPS 이동 경로예요."
+        : "실제 GPS 이동 경로를 표시하고 있어요."
       : selectedCourseRoute.length > 0
-        ? "선택한 추천 코스를 미리 보여줘요. 산책을 시작하면 실제 GPS 이동 경로로 바뀌어요."
+        ? "선택한 추천 코스를 점선으로 미리 보여줘요. 산책을 시작하면 실제 GPS 경로가 함께 표시돼요."
         : "산책을 시작하면 GPS 이동 경로가 지도에 선으로 표시돼요.";
   const isRunning = walk.state.status === "running";
   const isPaused = walk.state.status === "paused";
@@ -252,10 +255,11 @@ export function WalkRecorderPanel({
 
         <div className="mt-[16px] overflow-hidden rounded-[18px] border border-ms-line shadow-sm">
           <WalkActiveRouteMap
+            actualPoints={actualRoutePoints}
             appKey={kakaoMapAppKey}
             caption="방금 걸은 GPS 이동 경로예요."
             fallbackCenter={mapFallbackCenter}
-            points={previewPoints}
+            plannedPoints={selectedCourseRoute}
           />
         </div>
 
@@ -355,7 +359,13 @@ export function WalkRecorderPanel({
             <MapPin className="text-ms-emphasis-green" size={17} />
             {selectedCourse ? `${selectedCourse.direction} 코스` : "자유 산책"}
           </div>
-          <WalkActiveRouteMap appKey={kakaoMapAppKey} caption={mapCaption} fallbackCenter={mapFallbackCenter} points={previewPoints} />
+          <WalkActiveRouteMap
+            actualPoints={actualRoutePoints}
+            appKey={kakaoMapAppKey}
+            caption={mapCaption}
+            fallbackCenter={mapFallbackCenter}
+            plannedPoints={selectedCourseRoute}
+          />
         </section>
 
         <section className="relative z-0 -mt-[20px] rounded-t-[32px] bg-ms-page px-[24px] pt-[24px] pb-[120px]">

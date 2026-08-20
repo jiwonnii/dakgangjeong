@@ -235,8 +235,11 @@ export default function RecordsTabPage() {
             <StreakFlameIcon className="text-ms-emphasis" size={17} />
             연속 산책
           </span>
-          <span className="text-[15px] font-extrabold text-ms-emphasis">
+          <span className="text-right text-[15px] font-extrabold text-ms-emphasis">
             {streak ? `${streak.streakDays}일` : "확인 중"}
+            {streak && !streak.walkedToday ? (
+              <span className="block text-[11px] font-bold text-ms-muted">오늘 산책하면 이어져요</span>
+            ) : null}
           </span>
         </section>
 

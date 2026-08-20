@@ -1,12 +1,13 @@
 "use client";
 
-import { Bell, CalendarCheck, ChevronRight, CloudSun, PawPrint, Lock, Pill, Play } from "lucide-react";
+import { CalendarCheck, ChevronRight, CloudSun, PawPrint, Lock, Pill, Play } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { PetBowlIcon } from "../_components/PetBowlIcon";
 import { useAuth } from "../auth-context";
 import { getApproximateCurrentOrigin } from "../lib/geolocation";
 import type { CareTodayResponse, WarningsResponse } from "../lib/types";
+import { NotificationBell } from "../notification-bell";
 import type { StreakResponse, WalkRecord, WalkRecordListResponse } from "../records/record-utils";
 import { kstDateKeyFromIso, toDateKey } from "../records/record-utils";
 
@@ -201,7 +202,6 @@ export function MainTab() {
   const [streak, setStreak] = useState<StreakResponse | null>(null);
 
   const [summarySlide, setSummarySlide] = useState(0);
-  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
   const dogId = primaryDog?.id ?? "";
 
@@ -425,28 +425,11 @@ export function MainTab() {
       <div className="w-full max-w-[375px] pb-[104px] text-ms-ink">
         <header className="flex h-[72px] items-center justify-between px-[24px]">
           <img alt="산책가개" className="h-[40px] w-[40px] rounded-[12px]" src="/logo.png" />
-          <div className="relative">
-            <button
-              aria-expanded={isNotificationOpen}
-              aria-label="공유 알림"
-              className="relative grid h-[40px] w-[40px] place-items-center rounded-full bg-ms-sunken text-ms-ink"
-              onClick={() => setIsNotificationOpen((value) => !value)}
-              type="button"
-            >
-              <Bell size={20} strokeWidth={2} />
-            </button>
-
-            {isNotificationOpen ? (
-              <section className="absolute right-0 top-[48px] z-20 w-[292px] rounded-[22px] border border-ms-line bg-ms-card p-[14px] text-ms-ink shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-[15px] font-extrabold leading-none">공유 알림</h2>
-                </div>
-                <p className="mt-[12px] rounded-[16px] bg-ms-sunken px-[12px] py-[16px] text-center text-[13px] font-bold text-ms-muted">
-                  아직 알림이 없어요.
-                </p>
-              </section>
-            ) : null}
-          </div>
+          <NotificationBell
+            buttonClassName="relative grid h-[40px] w-[40px] place-items-center rounded-full bg-ms-sunken text-ms-ink"
+            dogId={primaryDog.id}
+            panelClassName="absolute right-0 top-[48px] z-20 w-[292px] rounded-[22px] border border-ms-line bg-ms-card p-[14px] text-ms-ink shadow-sm"
+          />
         </header>
 
         {/* 히어로: 숫자가 아니라 해석 문장이 먼저 온다 — 오늘의 산책 판단(경고) 결과로 결정된다 */}
@@ -626,6 +609,9 @@ export function MainTab() {
               <p className="text-[14px] font-extrabold leading-none text-ms-ink">
                 {streak?.streakDays ?? 0}일 연속 달성
               </p>
+              {streak && !streak.walkedToday ? (
+                <p className="text-[11px] font-bold text-ms-muted">오늘 산책하면 이어져요</p>
+              ) : null}
             </li>
           </ul>
 

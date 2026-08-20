@@ -22,7 +22,13 @@ export type WalkRecord = {
 };
 
 export type WalkRecordListResponse = { records: WalkRecord[] };
-export type StreakResponse = { streakDays: number; throughDate: string; dogId: string | null };
+export type StreakResponse = {
+  streakDays: number;
+  throughDate: string;
+  walkedToday: boolean;
+  needsWalkToday: boolean;
+  dogId: string | null;
+};
 export type CalendarDay = { key: string; date: Date; isCurrentMonth: boolean };
 
 export const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];

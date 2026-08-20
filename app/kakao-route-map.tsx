@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { loadKakaoMaps } from "./kakao-maps";
-import type { LatLon, RecommendedCourse } from "./lib/types";
+import type { LatLon, PetFacility, RecommendedCourse } from "./lib/types";
 
 const COURSE_COLORS = ["#2d7051", "#2f6fd6", "#c07a1a"];
 
@@ -10,11 +10,13 @@ const COURSE_COLORS = ["#2d7051", "#2f6fd6", "#c07a1a"];
 export function KakaoRouteMap({
   appKey,
   courses,
+  facilities = [],
   origin,
   onOriginPicked
 }: {
   appKey: string;
   courses: RecommendedCourse[];
+  facilities?: PetFacility[];
   origin: LatLon;
   onOriginPicked: (origin: LatLon) => void;
 }) {
@@ -71,7 +73,15 @@ export function KakaoRouteMap({
           routePath.forEach((point) => bounds.extend(point));
         });
 
-        if (courses.length > 0) {
+        facilities.slice(0, 10).forEach((facility) => {
+          const facilityPoint = new maps.LatLng(facility.lat, facility.lon);
+          new maps.Marker({
+            position: facilityPoint
+          }).setMap(map);
+          bounds.extend(facilityPoint);
+        });
+
+        if (courses.length > 0 || facilities.length > 0) {
           map.setBounds(bounds);
         } else {
           map.setCenter(centerPoint);
@@ -88,7 +98,7 @@ export function KakaoRouteMap({
     return () => {
       cancelled = true;
     };
-  }, [appKey, courses, origin, onOriginPicked]);
+  }, [appKey, courses, facilities, origin, onOriginPicked]);
 
   if (!appKey) {
     return (

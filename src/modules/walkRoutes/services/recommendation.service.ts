@@ -232,9 +232,9 @@ const REVIEW_FACTOR_LABELS: Record<ReviewFactorKey, string> = {
 };
 
 const REVIEW_FACTOR_SET = new Set<string>(REVIEW_FACTOR_KEYS);
-const REVIEW_PREFERENCE_LOOKBACK_LIMIT = 12;
-const REVIEW_PREFERENCE_MAX_COMPONENT_ADJUSTMENT = 0.08;
-const REVIEW_PREFERENCE_NORMALIZATION_WEIGHT = 8;
+const REVIEW_PREFERENCE_LOOKBACK_LIMIT = 20;
+const REVIEW_PREFERENCE_MAX_COMPONENT_ADJUSTMENT = 0.16;
+const REVIEW_PREFERENCE_NORMALIZATION_WEIGHT = 4;
 
 function emptyReviewPreferenceSummary(): ReviewPreferenceSummary {
   return {
@@ -482,8 +482,8 @@ function preferenceDetailSuffix(
   }
 
   return adjustment > 0
-    ? " 최근 리뷰에서 좋았던 점으로 선택되어 소폭 가산했어요."
-    : " 최근 리뷰에서 아쉬웠던 점으로 선택되어 소폭 감산했어요.";
+    ? " 최근 리뷰에서 좋았던 점으로 선택되어 가산했어요."
+    : " 최근 리뷰에서 아쉬웠던 점으로 선택되어 감산했어요.";
 }
 
 /** Exported for the lightweight GET /duration-options and GET /warnings
@@ -856,9 +856,19 @@ function buildCourseExplanation(
     }
   ];
 
+  const adjustedFactors = factors.map((factor) => {
+    const preferenceAdjustment = reviewPreference.adjustments[factor.key];
+
+    return {
+      ...factor,
+      detail: `${factor.detail}${preferenceDetailSuffix(factor.key, reviewPreference)}`,
+      preferenceAdjustment: preferenceAdjustment === 0 ? undefined : preferenceAdjustment
+    };
+  });
+
   return {
     summary: "총점은 사고위험, 차량노출, 보행위험, 환경/성격, 거리 적합도를 가중 합산해 계산해요.",
-    factors
+    factors: adjustedFactors
   };
 }
 

@@ -48,3 +48,8 @@ export const updateCareTaskSchema = z.object({
   status: z.enum(["pending", "completed", "skipped"]),
   note: z.string().trim().max(1000).optional()
 });
+
+export const careNudgeSchema = z.object({
+  dogId: uuidSchema,
+  taskId: uuidSchema.optional()
+});

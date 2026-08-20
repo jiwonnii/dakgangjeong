@@ -1,17 +1,35 @@
 "use client";
 
-import { PawPrint, LocateFixed, MapPin, RefreshCw, Route } from "lucide-react";
+import { Building2, PawPrint, LocateFixed, MapPin, RefreshCw, Route } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth-context";
 import { KakaoRouteMap } from "../kakao-route-map";
 import { MAX_RECOMMENDATION_GPS_ACCURACY_M, watchAccurateCurrentOrigin } from "../lib/geolocation";
-import type { DurationOptions, LatLon, RecommendationResponse } from "../lib/types";
+import type { DurationOptions, LatLon, PetFacility, PetFacilitiesResponse, RecommendationResponse } from "../lib/types";
 import { WalkRecorderPanel } from "../walk-recorder-panel-next";
 import { CourseResults } from "./course-results";
 import { DurationPicker, type DurationChoice } from "./duration-picker";
 
 const DEFAULT_ORIGIN: LatLon = { lat: 37.5665, lon: 126.978 };
 const DEFAULT_CUSTOM_MINUTES = 30;
+const FACILITY_FILTERS: Array<{ value: "all" | PetFacility["facilityType"]; label: string }> = [
+  { value: "all", label: "전체" },
+  { value: "hospital", label: "병원" },
+  { value: "grooming", label: "미용" },
+  { value: "cafe", label: "카페" },
+  { value: "other", label: "기타" }
+];
+
+const FACILITY_LABELS: Record<PetFacility["facilityType"], string> = {
+  hospital: "동물병원",
+  grooming: "미용",
+  cafe: "동반 카페",
+  other: "관련 업체"
+};
+
+function formatFacilityDistance(meters: number) {
+  return meters < 1000 ? `${meters}m` : `${(meters / 1000).toFixed(1)}km`;
+}
 
 export function WalkTab() {
   const { api, kakaoMapAppKey, primaryDog, token } = useAuth();
@@ -23,6 +41,9 @@ export function WalkTab() {
   const [customMinutes, setCustomMinutes] = useState(DEFAULT_CUSTOM_MINUTES);
   const [durationOptions, setDurationOptions] = useState<DurationOptions | null>(null);
   const [recommendation, setRecommendation] = useState<RecommendationResponse | null>(null);
+  const [facilityType, setFacilityType] = useState<"all" | PetFacility["facilityType"]>("all");
+  const [facilities, setFacilities] = useState<PetFacility[]>([]);
+  const [facilityError, setFacilityError] = useState("");
   const [selectedRank, setSelectedRank] = useState(1);
   const [mode, setMode] = useState<"choose" | "results">("choose");
   const [walkStage, setWalkStage] = useState<"idle" | "active" | "review">("idle");
@@ -59,6 +80,38 @@ export function WalkTab() {
       cancelled = true;
     };
   }, [api, dogId, origin.lat, origin.lon]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const query = new URLSearchParams({
+      lat: String(origin.lat),
+      lon: String(origin.lon),
+      radiusM: "1500",
+      limit: "12"
+    });
+
+    if (facilityType !== "all") {
+      query.set("type", facilityType);
+    }
+
+    api<PetFacilitiesResponse>(`/api/pet-facilities?${query.toString()}`)
+      .then((payload) => {
+        if (!cancelled) {
+          setFacilities(payload.facilities);
+          setFacilityError("");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFacilities([]);
+          setFacilityError("주변 시설을 불러오지 못했어요.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [api, facilityType, origin.lat, origin.lon]);
 
   const courses = useMemo(
     () => (recommendation?.status === "ok" ? recommendation.courses : []),
@@ -187,6 +240,7 @@ export function WalkTab() {
               <KakaoRouteMap
                 appKey={kakaoMapAppKey}
                 courses={courses}
+                facilities={facilities}
                 origin={origin}
                 onOriginPicked={pickOriginFromMap}
               />
@@ -218,6 +272,61 @@ export function WalkTab() {
                     onChoiceChange={setChoice}
                     onCustomMinutesChange={setCustomMinutes}
                   />
+
+                  <section className="mt-[14px] rounded-[18px] border border-ms-line bg-ms-card p-[14px] shadow-sm">
+                    <div className="flex items-center justify-between gap-[10px]">
+                      <div className="flex items-center gap-[8px]">
+                        <Building2 className="text-ms-secondary" size={17} />
+                        <h2 className="text-[13px] font-extrabold text-ms-ink">주변 동물 시설</h2>
+                      </div>
+                      <span className="text-[11px] font-bold text-ms-muted">1.5km</span>
+                    </div>
+                    <div className="mt-[10px] flex gap-[6px] overflow-x-auto pb-[2px]">
+                      {FACILITY_FILTERS.map((filter) => (
+                        <button
+                          aria-pressed={facilityType === filter.value}
+                          className={`shrink-0 rounded-full px-[10px] py-[6px] text-[11px] font-extrabold ${
+                            facilityType === filter.value
+                              ? "bg-ms-brand text-white"
+                              : "bg-ms-sunken text-ms-secondary"
+                          }`}
+                          key={filter.value}
+                          onClick={() => setFacilityType(filter.value)}
+                          type="button"
+                        >
+                          {filter.label}
+                        </button>
+                      ))}
+                    </div>
+                    {facilityError ? (
+                      <p className="mt-[10px] rounded-[12px] bg-ms-warn-bg px-[12px] py-[10px] text-[11px] font-bold text-ms-warn-fg">
+                        {facilityError}
+                      </p>
+                    ) : facilities.length > 0 ? (
+                      <div className="mt-[10px] grid gap-[7px]">
+                        {facilities.slice(0, 3).map((facility) => (
+                          <div
+                            className="flex items-center justify-between gap-[10px] rounded-[12px] bg-ms-sunken px-[12px] py-[10px]"
+                            key={facility.id}
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-[12px] font-extrabold text-ms-ink">{facility.name}</p>
+                              <p className="mt-[3px] text-[11px] font-bold text-ms-muted">
+                                {FACILITY_LABELS[facility.facilityType]}
+                              </p>
+                            </div>
+                            <span className="shrink-0 text-[11px] font-extrabold text-ms-emphasis-green">
+                              {formatFacilityDistance(facility.distanceMeters)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-[10px] rounded-[12px] bg-ms-sunken px-[12px] py-[10px] text-[11px] font-bold text-ms-muted">
+                        가까운 시설 데이터가 아직 없어요.
+                      </p>
+                    )}
+                  </section>
 
                   <button
                     className="mt-[14px] flex h-[56px] w-full items-center justify-center gap-[10px] rounded-full bg-ms-brand text-[15px] font-extrabold text-white shadow-sm active:opacity-90 disabled:opacity-60"

@@ -3,6 +3,7 @@ import type { z } from "zod";
 import { AppError } from "../../lib/app-error";
 import { getSupabaseAdminClient } from "../../lib/supabase";
 import type {
+  careNudgeSchema,
   careRoutineListQuerySchema,
   careRoutineSchema,
   careScheduleQuerySchema,
@@ -522,8 +523,95 @@ export const updateCareTask: RequestHandler = async (req, res, next) => {
   }
 };
 
-export const sendCareNudge: RequestHandler = (_req, res) => {
-  res.status(501).json({
-    message: "Care nudge notification API is not implemented yet."
-  });
+export const sendCareNudge: RequestHandler = async (req, res, next) => {
+  try {
+    const userId = getAuthUserId(req);
+    const body = req.body as z.infer<typeof careNudgeSchema>;
+    await assertDogGuardian(body.dogId, userId);
+
+    const supabase = getSupabaseAdminClient();
+    const [{ data: dog, error: dogError }, { data: actor, error: actorError }, { data: guardians, error: guardiansError }] =
+      await Promise.all([
+        supabase.from("dogs").select("id, name").eq("id", body.dogId).maybeSingle(),
+        supabase.from("guardian_profiles").select("display_name").eq("id", userId).maybeSingle(),
+        supabase
+          .from("dog_guardians")
+          .select("user_id")
+          .eq("dog_id", body.dogId)
+          .neq("user_id", userId)
+      ]);
+
+    if (dogError) {
+      throw new AppError(dogError.message, 500, "DOG_LOOKUP_FAILED");
+    }
+
+    if (!dog) {
+      throw new AppError("Dog not found.", 404, "DOG_NOT_FOUND");
+    }
+
+    if (actorError) {
+      throw new AppError(actorError.message, 500, "GUARDIAN_PROFILE_LOOKUP_FAILED");
+    }
+
+    if (guardiansError) {
+      throw new AppError(guardiansError.message, 500, "DOG_GUARDIAN_LOOKUP_FAILED");
+    }
+
+    let taskTitle: string | null = null;
+
+    if (body.taskId) {
+      const { data: task, error: taskError } = await supabase
+        .from("care_tasks")
+        .select("id, dog_id, title")
+        .eq("id", body.taskId)
+        .maybeSingle();
+
+      if (taskError) {
+        throw new AppError(taskError.message, 500, "CARE_TASK_LOOKUP_FAILED");
+      }
+
+      if (!task || (task as { dog_id: string }).dog_id !== body.dogId) {
+        throw new AppError("Care task not found.", 404, "CARE_TASK_NOT_FOUND");
+      }
+
+      taskTitle = (task as { title: string }).title;
+    }
+
+    const recipients = ((guardians ?? []) as Array<{ user_id: string }>).map((row) => row.user_id);
+
+    if (recipients.length === 0) {
+      res.status(202).json({ message: "함께 알림을 받을 공동 보호자가 아직 없어요.", recipientCount: 0 });
+      return;
+    }
+
+    const dogName = (dog as { name: string }).name;
+    const actorName = (actor as { display_name?: string | null } | null)?.display_name ?? "공동 보호자";
+    const bucket = Math.floor(Date.now() / 600_000);
+    const targetLabel = taskTitle ? `${taskTitle}을(를)` : `${dogName} 케어를`;
+    const rows = recipients.map((recipientId) => ({
+      dog_id: body.dogId,
+      recipient_user_id: recipientId,
+      actor_user_id: userId,
+      type: "care_nudge",
+      title: `${actorName}님이 콕 찔렀어요`,
+      message: `${targetLabel} 확인해 달라는 알림이에요.`,
+      metadata: { taskId: body.taskId ?? null },
+      dedupe_key: `care-nudge:${recipientId}:${body.taskId ?? body.dogId}:${bucket}`
+    }));
+
+    const { error: insertError } = await supabase
+      .from("notifications")
+      .upsert(rows, { onConflict: "dedupe_key", ignoreDuplicates: true });
+
+    if (insertError) {
+      throw new AppError(insertError.message, 500, "CARE_NUDGE_CREATE_FAILED");
+    }
+
+    res.status(202).json({
+      message: "콕 찔렀어요.",
+      recipientCount: recipients.length
+    });
+  } catch (error) {
+    next(error);
+  }
 };

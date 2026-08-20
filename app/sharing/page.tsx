@@ -1,9 +1,10 @@
 "use client";
 
-import { Bell, Copy, Users } from "lucide-react";
+import { Copy, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth-context";
 import type { CareTask, CareTodayResponse } from "../lib/types";
+import { NotificationBell } from "../notification-bell";
 import {
   buildTimes,
   CARE_TITLES,
@@ -98,7 +99,6 @@ export default function SharingTabPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
-  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [updatingTaskId, setUpdatingTaskId] = useState("");
   const [selectedDateKey, setSelectedDateKey] = useState(() => toDateKeyLocal(new Date()));
 
@@ -197,18 +197,16 @@ export default function SharingTabPage() {
 
     setError("");
 
-    // 백엔드 알림 발송이 아직 501 스텁이라 실제로는 항상 실패한다. 그래도 누른 사람에게는
-    // 성공한 것처럼 보여준다 — 실패 메시지를 띄우면 기능이 고장난 것처럼 느껴지기 때문.
     try {
-      await api("/api/care/nudges", {
+      const response = await api<{ message: string; recipientCount: number }>("/api/care/nudges", {
         method: "POST",
         body: JSON.stringify({ dogId: primaryDog.id, taskId: task.id })
       });
-    } catch {
-      // 무시: 위 주석 참고.
+      setNotice(response.recipientCount > 0 ? "콕 찔렀어요" : response.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "콕찌르기를 보내지 못했어요.");
+      return;
     }
-
-    setNotice("콕 찔렀어요");
   }
 
   function openEditor() {
@@ -331,24 +329,12 @@ export default function SharingTabPage() {
               <p className="text-[11px] font-bold leading-none">{primaryDog.name}</p>
               <h1 className="mt-[4px] text-[21px] font-extrabold leading-none">셰어링</h1>
             </div>
-            <div className="relative">
-              <button
-                aria-expanded={isNotificationOpen}
-                aria-label="공유 알림"
-                className="relative grid h-[34px] w-[34px] place-items-center rounded-full bg-white/40"
-                onClick={() => setIsNotificationOpen((value) => !value)}
-                type="button"
-              >
-                <Bell size={17} strokeWidth={2.3} />
-              </button>
-
-              {isNotificationOpen ? (
-                <section className="absolute right-0 top-[42px] z-20 w-[240px] rounded-[22px] border border-ms-line bg-ms-card p-[14px] text-ms-ink shadow-sm">
-                  <h2 className="text-[14px] font-extrabold leading-none">공유 알림</h2>
-                  <p className="mt-[10px] text-[12px] font-bold text-ms-muted">아직 새로운 알림이 없어요.</p>
-                </section>
-              ) : null}
-            </div>
+            <NotificationBell
+              buttonClassName="relative grid h-[34px] w-[34px] place-items-center rounded-full bg-white/40"
+              dogId={primaryDog.id}
+              iconSize={17}
+              panelClassName="absolute right-0 top-[42px] z-20 w-[240px] rounded-[22px] border border-ms-line bg-ms-card p-[14px] text-ms-ink shadow-sm"
+            />
           </div>
 
           <div className="mt-[16px] flex items-end justify-between">

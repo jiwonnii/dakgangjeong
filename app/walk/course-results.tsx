@@ -97,6 +97,11 @@ export function CourseResults({
               <p className={`text-[12px] font-semibold ${isSelected ? "text-ms-brand" : "text-ms-secondary"}`}>
                 {course.aiExplanation ?? course.explanation?.summary}
               </p>
+              {course.preferenceInsight ? (
+                <p className="rounded-[12px] bg-ms-ok-bg px-[12px] py-[9px] text-[11px] font-bold text-ms-ok-fg">
+                  {course.preferenceInsight}
+                </p>
+              ) : null}
               <div
                 className={`grid grid-cols-2 gap-[8px] text-[12px] font-bold sm:grid-cols-4 ${
                   isSelected ? "text-ms-brand" : "text-ms-ink"
@@ -117,6 +122,19 @@ export function CourseResults({
                     이 코스 산책 시 고려사항
                   </summary>
                   <div className="mt-[10px] grid gap-[6px]">
+                    {course.explanation?.factors && course.explanation.factors.length > 0 ? (
+                      <div className="grid gap-[6px]">
+                        {course.explanation.factors.slice(0, 3).map((factor) => (
+                          <div
+                            className="rounded-[10px] bg-ms-card p-[10px] text-[11px] font-semibold text-ms-secondary"
+                            key={factor.key}
+                          >
+                            <span className="font-extrabold text-ms-ink">{factor.label}</span>
+                            <span className="ml-[5px] text-ms-muted">{factor.detail}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                     {course.cautions && course.cautions.length > 0 ? (
                       course.cautions.map((caution) => (
                         <div

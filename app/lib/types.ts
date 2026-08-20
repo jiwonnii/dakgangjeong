@@ -151,3 +151,35 @@ export type RecommendationResponse =
       status: "insufficient_coverage" | "generation_failed" | "no_courses_found";
       message: string;
     };
+
+export type AppNotification = {
+  id: string;
+  dogId: string | null;
+  recipientUserId: string;
+  actorUserId: string | null;
+  type: "care_nudge" | "walk_reminder";
+  title: string;
+  message: string;
+  metadata: Record<string, unknown>;
+  readAt: string | null;
+  createdAt: string;
+};
+
+export type NotificationListResponse = {
+  notifications: AppNotification[];
+  unreadCount: number;
+};
+
+export type PetFacility = {
+  id: string;
+  name: string;
+  facilityType: "hospital" | "grooming" | "cafe" | "other";
+  source: string;
+  lat: number;
+  lon: number;
+  distanceMeters: number;
+};
+
+export type PetFacilitiesResponse = {
+  facilities: PetFacility[];
+};

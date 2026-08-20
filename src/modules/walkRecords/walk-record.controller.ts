@@ -566,7 +566,9 @@ export const getWalkStreak: RequestHandler = async (req, res, next) => {
       ((data ?? []) as Array<{ started_at: string }>).map((row) => localDateKeyKst(row.started_at))
     );
 
-    let cursor = todayKeyKst();
+    const today = todayKeyKst();
+    const walkedToday = walkedDays.has(today);
+    let cursor = walkedToday ? today : previousDateKey(today);
     let streakDays = 0;
 
     while (walkedDays.has(cursor)) {
@@ -576,7 +578,9 @@ export const getWalkStreak: RequestHandler = async (req, res, next) => {
 
     res.json({
       streakDays,
-      throughDate: todayKeyKst(),
+      throughDate: walkedToday ? today : previousDateKey(today),
+      walkedToday,
+      needsWalkToday: !walkedToday,
       dogId: query.dogId ?? null
     });
   } catch (error) {

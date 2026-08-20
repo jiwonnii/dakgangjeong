@@ -6,12 +6,14 @@ import type { WalkPolylinePoint } from "./walkTracking";
 
 export function WalkActiveRouteMap({
   appKey,
-  points,
+  actualPoints,
+  plannedPoints = [],
   fallbackCenter,
   caption
 }: {
   appKey: string;
-  points: readonly WalkPolylinePoint[];
+  actualPoints: readonly WalkPolylinePoint[];
+  plannedPoints?: readonly WalkPolylinePoint[];
   fallbackCenter: WalkPolylinePoint;
   caption: string;
 }) {
@@ -33,25 +35,41 @@ export function WalkActiveRouteMap({
         }
 
         containerRef.current.innerHTML = "";
-        const path =
-          points.length > 0
-            ? points.map((point) => new maps.LatLng(point.latitude, point.longitude))
+        const actualPath =
+          actualPoints.length > 0
+            ? actualPoints.map((point) => new maps.LatLng(point.latitude, point.longitude))
             : [new maps.LatLng(fallbackCenter.latitude, fallbackCenter.longitude)];
-        const center = path[path.length - 1] ?? path[0];
-        const map = new maps.Map(containerRef.current, { center, level: path.length > 1 ? 4 : 5 });
+        const plannedPath = plannedPoints.map((point) => new maps.LatLng(point.latitude, point.longitude));
+        const visiblePath = actualPoints.length > 0 ? actualPath : plannedPath.length > 0 ? plannedPath : actualPath;
+        const center = visiblePath[visiblePath.length - 1] ?? visiblePath[0];
+        const map = new maps.Map(containerRef.current, { center, level: visiblePath.length > 1 ? 4 : 5 });
         const bounds = new maps.LatLngBounds();
-        path.forEach((point) => bounds.extend(point));
+        [...plannedPath, ...actualPath].forEach((point) => bounds.extend(point));
 
-        if (path.length > 1) {
+        if (plannedPath.length > 1) {
           new maps.Polyline({
-            path,
+            path: plannedPath,
+            strokeWeight: 6,
+            strokeColor: "#8a96a3",
+            strokeOpacity: 0.72,
+            strokeStyle: "shortdash"
+          }).setMap(map);
+        }
+
+        if (actualPath.length > 1 && actualPoints.length > 0) {
+          new maps.Polyline({
+            path: actualPath,
             strokeWeight: 7,
             strokeColor: "#2d7051",
             strokeOpacity: 0.95,
             strokeStyle: "solid"
           }).setMap(map);
-          new maps.Marker({ position: path[0] }).setMap(map);
-          new maps.Marker({ position: path[path.length - 1] }).setMap(map);
+          new maps.Marker({ position: actualPath[0] }).setMap(map);
+          new maps.Marker({ position: actualPath[actualPath.length - 1] }).setMap(map);
+          map.setBounds(bounds);
+        } else if (plannedPath.length > 1) {
+          new maps.Marker({ position: plannedPath[0] }).setMap(map);
+          new maps.Marker({ position: plannedPath[plannedPath.length - 1] }).setMap(map);
           map.setBounds(bounds);
         } else {
           new maps.Marker({ position: center }).setMap(map);
@@ -69,7 +87,7 @@ export function WalkActiveRouteMap({
     return () => {
       cancelled = true;
     };
-  }, [appKey, fallbackCenter.latitude, fallbackCenter.longitude, points]);
+  }, [actualPoints, appKey, fallbackCenter.latitude, fallbackCenter.longitude, plannedPoints]);
 
   if (!appKey) {
     return (
