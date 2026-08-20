@@ -12,12 +12,14 @@ import { DurationPicker, type DurationChoice } from "./duration-picker";
 
 const DEFAULT_ORIGIN: LatLon = { lat: 37.5665, lon: 126.978 };
 const DEFAULT_CUSTOM_MINUTES = 30;
-const FACILITY_FILTERS: Array<{ value: "all" | PetFacility["facilityType"]; label: string }> = [
-  { value: "all", label: "전체" },
-  { value: "hospital", label: "병원" },
-  { value: "grooming", label: "미용" },
-  { value: "cafe", label: "카페" },
-  { value: "other", label: "기타" }
+
+// 우버 앱의 "Suggestions" 가로 4칸 아이콘 그리드를 참고한 레이아웃.
+// 배경을 제거한 실제 이미지(public/*.png)를 그대로 쓴다.
+const FACILITY_FILTERS: Array<{ value: PetFacility["facilityType"]; label: string; icon: string }> = [
+  { value: "hospital", label: "병원", icon: "/병원배경제거.png" },
+  { value: "grooming", label: "미용", icon: "/미용실배경제거.png" },
+  { value: "cafe", label: "카페", icon: "/카페배경제거.png" },
+  { value: "other", label: "기타", icon: "/기타배경제거.png" }
 ];
 
 const FACILITY_LABELS: Record<PetFacility["facilityType"], string> = {
@@ -41,7 +43,7 @@ export function WalkTab() {
   const [customMinutes, setCustomMinutes] = useState(DEFAULT_CUSTOM_MINUTES);
   const [durationOptions, setDurationOptions] = useState<DurationOptions | null>(null);
   const [recommendation, setRecommendation] = useState<RecommendationResponse | null>(null);
-  const [facilityType, setFacilityType] = useState<"all" | PetFacility["facilityType"]>("all");
+  const [facilityType, setFacilityType] = useState<PetFacility["facilityType"] | null>(null);
   const [facilities, setFacilities] = useState<PetFacility[]>([]);
   const [facilityError, setFacilityError] = useState("");
   const [selectedRank, setSelectedRank] = useState(1);
@@ -82,17 +84,20 @@ export function WalkTab() {
   }, [api, dogId, origin.lat, origin.lon]);
 
   useEffect(() => {
+    if (!facilityType) {
+      setFacilities([]);
+      setFacilityError("");
+      return;
+    }
+
     let cancelled = false;
     const query = new URLSearchParams({
       lat: String(origin.lat),
       lon: String(origin.lon),
       radiusM: "1500",
-      limit: "12"
+      limit: "12",
+      type: facilityType
     });
-
-    if (facilityType !== "all") {
-      query.set("type", facilityType);
-    }
 
     api<PetFacilitiesResponse>(`/api/pet-facilities?${query.toString()}`)
       .then((payload) => {
@@ -281,51 +286,72 @@ export function WalkTab() {
                       </div>
                       <span className="text-[11px] font-bold text-ms-muted">1.5km</span>
                     </div>
-                    <div className="mt-[10px] flex gap-[6px] overflow-x-auto pb-[2px]">
-                      {FACILITY_FILTERS.map((filter) => (
-                        <button
-                          aria-pressed={facilityType === filter.value}
-                          className={`shrink-0 rounded-full px-[10px] py-[6px] text-[11px] font-extrabold ${
-                            facilityType === filter.value
-                              ? "bg-ms-brand text-white"
-                              : "bg-ms-sunken text-ms-secondary"
-                          }`}
-                          key={filter.value}
-                          onClick={() => setFacilityType(filter.value)}
-                          type="button"
-                        >
-                          {filter.label}
-                        </button>
-                      ))}
-                    </div>
-                    {facilityError ? (
-                      <p className="mt-[10px] rounded-[12px] bg-ms-warn-bg px-[12px] py-[10px] text-[11px] font-bold text-ms-warn-fg">
-                        {facilityError}
-                      </p>
-                    ) : facilities.length > 0 ? (
-                      <div className="mt-[10px] grid gap-[7px]">
-                        {facilities.slice(0, 3).map((facility) => (
-                          <div
-                            className="flex items-center justify-between gap-[10px] rounded-[12px] bg-ms-sunken px-[12px] py-[10px]"
-                            key={facility.id}
+                    <div className="mt-[12px] grid grid-cols-4 gap-[8px]">
+                      {FACILITY_FILTERS.map((filter) => {
+                        const isActive = facilityType === filter.value;
+
+                        return (
+                          <button
+                            aria-pressed={isActive}
+                            className="flex flex-col items-center gap-[6px]"
+                            key={filter.value}
+                            onClick={() => setFacilityType((current) => (current === filter.value ? null : filter.value))}
+                            type="button"
                           >
-                            <div className="min-w-0">
-                              <p className="truncate text-[12px] font-extrabold text-ms-ink">{facility.name}</p>
-                              <p className="mt-[3px] text-[11px] font-bold text-ms-muted">
-                                {FACILITY_LABELS[facility.facilityType]}
-                              </p>
-                            </div>
-                            <span className="shrink-0 text-[11px] font-extrabold text-ms-emphasis-green">
-                              {formatFacilityDistance(facility.distanceMeters)}
+                            <span
+                              className={`flex h-[52px] w-full items-center justify-center rounded-[16px] border ${
+                                isActive ? "border-ms-brand" : "border-ms-line bg-ms-sunken"
+                              }`}
+                              style={
+                                isActive
+                                  ? { backgroundColor: "color-mix(in srgb, var(--brand) 14%, white)" }
+                                  : undefined
+                              }
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img alt="" className="h-[26px] w-[26px] object-contain" src={filter.icon} />
                             </span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="mt-[10px] rounded-[12px] bg-ms-sunken px-[12px] py-[10px] text-[11px] font-bold text-ms-muted">
-                        가까운 시설 데이터가 아직 없어요.
-                      </p>
-                    )}
+                            <span
+                              className={`text-[11px] font-extrabold ${
+                                isActive ? "text-ms-brand" : "text-ms-secondary"
+                              }`}
+                            >
+                              {filter.label}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {facilityType ? (
+                      facilityError ? (
+                        <p className="mt-[10px] rounded-[12px] bg-ms-warn-bg px-[12px] py-[10px] text-[11px] font-bold text-ms-warn-fg">
+                          {facilityError}
+                        </p>
+                      ) : facilities.length > 0 ? (
+                        <div className="mt-[10px] grid gap-[7px]">
+                          {facilities.slice(0, 3).map((facility) => (
+                            <div
+                              className="flex items-center justify-between gap-[10px] rounded-[12px] bg-ms-sunken px-[12px] py-[10px]"
+                              key={facility.id}
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-[12px] font-extrabold text-ms-ink">{facility.name}</p>
+                                <p className="mt-[3px] text-[11px] font-bold text-ms-muted">
+                                  {FACILITY_LABELS[facility.facilityType]}
+                                </p>
+                              </div>
+                              <span className="shrink-0 text-[11px] font-extrabold text-ms-emphasis-green">
+                                {formatFacilityDistance(facility.distanceMeters)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-[10px] rounded-[12px] bg-ms-sunken px-[12px] py-[10px] text-[11px] font-bold text-ms-muted">
+                          가까운 시설 데이터가 아직 없어요.
+                        </p>
+                      )
+                    ) : null}
                   </section>
 
                   <button
