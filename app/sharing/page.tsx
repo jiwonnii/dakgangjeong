@@ -2,6 +2,7 @@
 
 import { Copy, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { PawTrailLoader } from "../_components/PawTrailLoader";
 import { useAuth } from "../auth-context";
 import type { CareTask, CareTodayResponse } from "../lib/types";
 import { NotificationBell } from "../notification-bell";
@@ -449,6 +450,7 @@ export default function SharingTabPage() {
             {isLoading ? (
               <div className="rounded-[20px] border border-ms-line bg-ms-card p-[16px] text-center text-[13px] font-bold text-ms-muted shadow-sm">
                 오늘 체크리스트를 불러오는 중이에요...
+                <PawTrailLoader />
               </div>
             ) : (
               <>

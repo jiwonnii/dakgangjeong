@@ -2,6 +2,7 @@
 
 import { Eye, EyeOff, PawPrint } from "lucide-react";
 import { useState, type FormEvent } from "react";
+import { WelcomeHero } from "./_components/WelcomeHero";
 import { useAuth } from "./auth-context";
 
 export function AuthScreen() {
@@ -47,25 +48,11 @@ export function AuthScreen() {
 
   return (
     <main className="flex min-h-screen w-full justify-center overflow-x-hidden bg-ms-page text-ms-ink">
-      <section
-        className="flex min-h-screen w-[min(100vw,375px)] max-w-[375px] flex-col pb-8"
-        style={{
-          backgroundImage:
-            "radial-gradient(ellipse 340px 230px at 32% -5%, color-mix(in srgb, var(--p-ember-600) 45%, white) 0%, transparent 90%), " +
-            "radial-gradient(ellipse 360px 240px at 68% 5%, color-mix(in srgb, var(--p-periwinkle-400) 45%, white) 0%, transparent 90%)",
-          backgroundBlendMode: "screen"
-        }}
-      >
-        <div className="flex flex-col items-center px-6 pb-12 pt-14">
-          <img
-            alt="산책가개"
-            className="h-14 w-14 rounded-full bg-ms-card object-cover p-2 shadow-lg"
-            src="/logo.png"
-          />
-        </div>
+      <section className="flex min-h-screen w-[min(100vw,375px)] max-w-[375px] flex-col pb-8">
+        <WelcomeHero />
 
         <h1 className="mt-8 text-center text-[26px] font-extrabold leading-none text-ms-emphasis-blue">
-          {isSignIn ? "로그인" : "가입하기"}
+          {isSignIn ? "산책하게" : "가입하기"}
         </h1>
 
         <form className="mt-10 flex flex-col gap-5 px-6" onSubmit={handleSubmit}>
