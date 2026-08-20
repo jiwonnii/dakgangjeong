@@ -55,6 +55,7 @@
     "check": "tsc --noEmit",
     "check:jobs": "tsc --noEmit -p tsconfig.jobs.json",
     "db:check": "tsx scripts/check-db-schema.ts",
+    "demo:seed": "tsx scripts/seed-demo-account.ts",
     "precompute:bearings": "tsx jobs/ingest/precompute-bearing-grid.ts",
     "ingest:road-segments": "tsx jobs/ingest/ingest-road-segments.ts",
     "ingest:street-trees": "tsx jobs/ingest/ingest-street-trees.ts",
