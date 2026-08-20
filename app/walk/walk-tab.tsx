@@ -13,13 +13,9 @@ import { DurationPicker, type DurationChoice } from "./duration-picker";
 const DEFAULT_ORIGIN: LatLon = { lat: 37.5665, lon: 126.978 };
 const DEFAULT_CUSTOM_MINUTES = 30;
 
-// 우버 앱의 "Suggestions" 가로 4칸 아이콘 그리드를 참고한 레이아웃.
-// 배경을 제거한 실제 이미지(public/*.png)를 그대로 쓴다.
+// 현재 적재된 주변 시설 데이터는 동물병원만 신뢰 가능하므로 병원만 노출한다.
 const FACILITY_FILTERS: Array<{ value: PetFacility["facilityType"]; label: string; icon: string }> = [
-  { value: "hospital", label: "병원", icon: "/병원배경제거.png" },
-  { value: "grooming", label: "미용", icon: "/미용실배경제거.png" },
-  { value: "cafe", label: "카페", icon: "/카페배경제거.png" },
-  { value: "other", label: "기타", icon: "/기타배경제거.png" }
+  { value: "hospital", label: "동물병원", icon: "/병원배경제거.png" }
 ];
 
 const FACILITY_LABELS: Record<PetFacility["facilityType"], string> = {
@@ -282,11 +278,11 @@ export function WalkTab() {
                     <div className="flex items-center justify-between gap-[10px]">
                       <div className="flex items-center gap-[8px]">
                         <Building2 className="text-ms-secondary" size={17} />
-                        <h2 className="text-[13px] font-extrabold text-ms-ink">주변 동물 시설</h2>
+                        <h2 className="text-[13px] font-extrabold text-ms-ink">주변 동물병원</h2>
                       </div>
                       <span className="text-[11px] font-bold text-ms-muted">1.5km</span>
                     </div>
-                    <div className="mt-[12px] grid grid-cols-4 gap-[8px]">
+                    <div className="mt-[12px] grid grid-cols-1 gap-[8px]">
                       {FACILITY_FILTERS.map((filter) => {
                         const isActive = facilityType === filter.value;
 

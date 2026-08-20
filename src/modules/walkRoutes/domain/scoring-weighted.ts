@@ -22,14 +22,17 @@
 
 import {
   BENCH_COUNT_NORMALIZATION_MAX,
+  CAR_FEAR_SCORE_WEIGHTS,
   DEFAULT_SCORE_WEIGHTS,
   DOG_DENSITY_NORMALIZATION_MAX_PER_SQKM,
   DOG_ENCOUNTER_WEIGHTS,
   FIT_SCORE_NORMALIZATION_RATIO,
+  PARK_PREFERENCE_SCORE_WEIGHTS,
   PEDESTRIAN_HAZARD_COUNT_NORMALIZATION_MAX,
   PET_FACILITY_COUNT_NORMALIZATION_MAX,
   RISK_ZONE_COUNT_NORMALIZATION_MAX,
   ROUTE_SCORE_WEIGHTS,
+  TIMID_SCORE_WEIGHTS,
   TREES_PER_KM_NORMALIZATION_MAX,
   VEHICLE_EXPOSURE_FALLBACK_WHEN_UNMATCHED,
   VEHICLE_EXPOSURE_MAX,
@@ -139,9 +142,17 @@ function calculateEnvironmentScore(candidate: CourseFacts, profile: DogProfile, 
 }
 
 function calculateFamiliarityScore(candidate: CourseFacts, profile: DogProfile): number {
-  return profile.personality.isAdventurous
-    ? 1 - candidate.diversityOverlapRatio
-    : candidate.diversityOverlapRatio;
+  if (profile.personality.isAdventurous) {
+    return 1 - candidate.diversityOverlapRatio;
+  }
+
+  if (profile.personality.isTimid) {
+    return candidate.diversityOverlapRatio;
+  }
+
+  // Neutral dogs should not be treated as if they explicitly prefer
+  // repeated routes. Give only a mild freshness nudge.
+  return 0.5 + (1 - candidate.diversityOverlapRatio) * 0.25;
 }
 
 function calculateFitScore(actualMeters: number, targetMeters: number): number {
@@ -162,8 +173,65 @@ function calculateFitScore(actualMeters: number, targetMeters: number): number {
  * Priority: 자동차 무서워함 > 겁 많음(사람 포함) > 공원 선호 > 기본.
  */
 export function selectScoreWeights(profile: DogProfile): ScoreWeightProfile {
-  void profile;
+  if (profile.personality.isCarFearful) {
+    return CAR_FEAR_SCORE_WEIGHTS;
+  }
+
+  if (profile.personality.isTimid) {
+    return TIMID_SCORE_WEIGHTS;
+  }
+
+  if (profile.personality.prefersParks) {
+    return PARK_PREFERENCE_SCORE_WEIGHTS;
+  }
+
   return DEFAULT_SCORE_WEIGHTS;
+}
+
+function distributeAxisWeight(
+  axisWeight: number,
+  componentWeights: readonly number[]
+): number[] {
+  const total = componentWeights.reduce((sum, weight) => sum + weight, 0);
+  return componentWeights.map((weight) => (weight / total) * axisWeight);
+}
+
+function selectComfortSplit(profile: DogProfile): { environment: number; familiarity: number } {
+  if (profile.personality.isTimid) {
+    return { environment: 0.35, familiarity: 0.65 };
+  }
+
+  if (profile.personality.isAdventurous) {
+    return { environment: 0.45, familiarity: 0.55 };
+  }
+
+  if (profile.personality.prefersParks) {
+    return { environment: 0.8, familiarity: 0.2 };
+  }
+
+  return { environment: 0.8, familiarity: 0.2 };
+}
+
+export function selectRouteScoreWeights(profile: DogProfile): RouteScoreWeightProfile {
+  const axisWeights = selectScoreWeights(profile);
+  const [riskZones, vehicleExposure, pedestrianSafety] = distributeAxisWeight(
+    axisWeights.safety,
+    [
+      ROUTE_SCORE_WEIGHTS.riskZones,
+      ROUTE_SCORE_WEIGHTS.vehicleExposure,
+      ROUTE_SCORE_WEIGHTS.pedestrianSafety
+    ]
+  );
+  const comfortSplit = selectComfortSplit(profile);
+
+  return {
+    riskZones,
+    vehicleExposure,
+    pedestrianSafety,
+    environment: axisWeights.comfort * comfortSplit.environment,
+    familiarity: axisWeights.comfort * comfortSplit.familiarity,
+    fit: axisWeights.fit
+  };
 }
 
 export type ScoreBreakdown = {
@@ -200,7 +268,7 @@ export function calculateWeightedScore(
   const environment = calculateEnvironmentScore(candidate, profile, originContext);
   const familiarity = calculateFamiliarityScore(candidate, profile);
   const fit = calculateFitScore(candidate.distanceMeters, targetMeters);
-  const weights = ROUTE_SCORE_WEIGHTS;
+  const weights = selectRouteScoreWeights(profile);
 
   const safety =
     (riskZones * weights.riskZones +

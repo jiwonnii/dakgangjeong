@@ -56,6 +56,11 @@ import { fetchOriginContext, scoreRouteCandidates, type CourseFacts, type Origin
 import { applyHardFilters } from "../domain/scoring-filter";
 import { rankByWeightedScore, type ScoredCourse, type ScoreBreakdown } from "../domain/scoring-weighted";
 import { selectFinalCourses } from "../domain/course-selection";
+import {
+  inferAiPreferenceProfile,
+  type AiPreferenceProfile,
+  type AiPreferenceSignal
+} from "./ai-preference-profile.service";
 import type { DogPersonalityTag, DogSocialPreference, DurationChoice } from "../../../types/domain";
 
 export type RecommendationRequest = {
@@ -183,7 +188,7 @@ const recommendationCache = new TtlCache<string, RecommendationResult>(
   RECOMMENDATION_CACHE_TTL_SECONDS
 );
 
-const RECOMMENDATION_CACHE_VERSION = "route-score-v5-fill-three-courses";
+const RECOMMENDATION_CACHE_VERSION = "route-score-v7-ai-preference-profile";
 const ROUTE_SIGNATURE_PRECISION = 10000;
 const ROUTE_SIGNATURE_SAMPLE_COUNT = 24;
 
@@ -203,6 +208,7 @@ type ReviewPreferenceSummary = {
   totalRecords: number;
   signalRecords: number;
   adjustments: Record<ReviewFactorKey, number>;
+  weightAdjustments: Record<ReviewFactorKey, number>;
   signature: string;
   insight: string | null;
 };
@@ -211,6 +217,11 @@ type WalkReviewPreferenceRow = {
   rating: number | null;
   liked_factor: string | null;
   disliked_factor: string | null;
+  liked_notes: string | null;
+  disliked_notes: string | null;
+  distance_meters: number | null;
+  duration_seconds: number | null;
+  recommended_course: unknown | null;
 };
 
 const REVIEW_FACTOR_KEYS: readonly ReviewFactorKey[] = [
@@ -233,14 +244,27 @@ const REVIEW_FACTOR_LABELS: Record<ReviewFactorKey, string> = {
 
 const REVIEW_FACTOR_SET = new Set<string>(REVIEW_FACTOR_KEYS);
 const REVIEW_PREFERENCE_LOOKBACK_LIMIT = 20;
-const REVIEW_PREFERENCE_MAX_COMPONENT_ADJUSTMENT = 0.16;
-const REVIEW_PREFERENCE_NORMALIZATION_WEIGHT = 4;
+const REVIEW_PREFERENCE_MAX_SIGNAL_ADJUSTMENT = 0.24;
+const REVIEW_PREFERENCE_NORMALIZATION_WEIGHT = 3;
+const REVIEW_PREFERENCE_WEIGHT_DELTA_MULTIPLIER = 45;
+const AI_PREFERENCE_SIGNAL_ADJUSTMENT_MULTIPLIER = 0.18;
+const AI_PREFERENCE_WEIGHT_DELTA_MULTIPLIER = 45;
+const REVIEW_PREFERENCE_MAX_WEIGHT_ADJUSTMENT =
+  REVIEW_PREFERENCE_MAX_SIGNAL_ADJUSTMENT * REVIEW_PREFERENCE_WEIGHT_DELTA_MULTIPLIER;
 
 function emptyReviewPreferenceSummary(): ReviewPreferenceSummary {
   return {
     totalRecords: 0,
     signalRecords: 0,
     adjustments: {
+      riskZones: 0,
+      vehicleExposure: 0,
+      pedestrianSafety: 0,
+      environment: 0,
+      familiarity: 0,
+      fit: 0
+    },
+    weightAdjustments: {
       riskZones: 0,
       vehicleExposure: 0,
       pedestrianSafety: 0,
@@ -259,13 +283,21 @@ function isReviewFactorKey(value: string | null): value is ReviewFactorKey {
 
 function clampReviewAdjustment(value: number): number {
   return Math.max(
-    -REVIEW_PREFERENCE_MAX_COMPONENT_ADJUSTMENT,
-    Math.min(REVIEW_PREFERENCE_MAX_COMPONENT_ADJUSTMENT, value)
+    -REVIEW_PREFERENCE_MAX_SIGNAL_ADJUSTMENT,
+    Math.min(REVIEW_PREFERENCE_MAX_SIGNAL_ADJUSTMENT, value)
   );
 }
 
 function roundAdjustment(value: number): number {
   return Math.round(value * 1000) / 1000;
+}
+
+function roundWeightAdjustment(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function clampReviewWeightAdjustment(value: number): number {
+  return Math.max(0, Math.min(REVIEW_PREFERENCE_MAX_WEIGHT_ADJUSTMENT, value));
 }
 
 function reviewSignalWeight(rating: number | null, polarity: "liked" | "disliked"): number {
@@ -313,29 +345,87 @@ function summarizeReviewPreferences(rows: readonly WalkReviewPreferenceRow[]): R
 
   const signatureParts: string[] = [];
   let strongestKey: ReviewFactorKey | null = null;
-  let strongestAdjustment = 0;
+  let strongestWeightAdjustment = 0;
 
   for (const key of REVIEW_FACTOR_KEYS) {
-    const rawAdjustment =
-      ((likedScores.get(key) ?? 0) - (dislikedScores.get(key) ?? 0)) /
-      REVIEW_PREFERENCE_NORMALIZATION_WEIGHT;
+    const likedScore = likedScores.get(key) ?? 0;
+    const dislikedScore = dislikedScores.get(key) ?? 0;
+    const rawAdjustment = (likedScore - dislikedScore) / REVIEW_PREFERENCE_NORMALIZATION_WEIGHT;
     const adjustment = roundAdjustment(clampReviewAdjustment(rawAdjustment));
+    const weightAdjustment = roundWeightAdjustment(
+      Math.abs(
+        clampReviewAdjustment((likedScore + dislikedScore) / REVIEW_PREFERENCE_NORMALIZATION_WEIGHT)
+      ) * REVIEW_PREFERENCE_WEIGHT_DELTA_MULTIPLIER
+    );
 
     summary.adjustments[key] = adjustment;
-    signatureParts.push(`${key}:${adjustment}`);
+    summary.weightAdjustments[key] = weightAdjustment;
+    signatureParts.push(`${key}:${adjustment}:${weightAdjustment}`);
 
-    if (Math.abs(adjustment) > Math.abs(strongestAdjustment)) {
+    if (weightAdjustment > strongestWeightAdjustment) {
       strongestKey = key;
-      strongestAdjustment = adjustment;
+      strongestWeightAdjustment = weightAdjustment;
     }
   }
 
   summary.signature = summary.signalRecords > 0 ? signatureParts.join("|") : "none";
-  summary.insight = strongestKey
-    ? strongestAdjustment > 0
-      ? `최근 산책 리뷰에서 ${REVIEW_FACTOR_LABELS[strongestKey]} 만족도가 높아 이 요소를 조금 더 반영했어요.`
-      : `최근 산책 리뷰에서 ${REVIEW_FACTOR_LABELS[strongestKey]} 아쉬움이 있어 이 요소를 조금 더 보수적으로 봤어요.`
-    : null;
+  if (strongestKey) {
+    const strongestAdjustment = summary.adjustments[strongestKey];
+    summary.insight =
+      strongestAdjustment > 0
+        ? `최근 산책 리뷰에서 ${REVIEW_FACTOR_LABELS[strongestKey]} 만족도가 높아 이 요소의 가중치를 높였어요.`
+        : strongestAdjustment < 0
+          ? `최근 산책 리뷰에서 ${REVIEW_FACTOR_LABELS[strongestKey]} 아쉬움이 있어 이 요소를 더 엄격하게 봤어요.`
+          : `최근 산책 리뷰에서 ${REVIEW_FACTOR_LABELS[strongestKey]} 언급이 많아 이 요소의 가중치를 높였어요.`;
+  }
+
+  return summary;
+}
+
+function aiSignalPolarityAdjustment(polarity: AiPreferenceSignal["polarity"]): number {
+  if (polarity === "liked") {
+    return 1;
+  }
+
+  if (polarity === "disliked") {
+    return -1;
+  }
+
+  return 0;
+}
+
+function mergeAiPreferenceProfile(
+  summary: ReviewPreferenceSummary,
+  profile: AiPreferenceProfile
+): ReviewPreferenceSummary {
+  if (profile.signals.length === 0) {
+    return summary;
+  }
+
+  for (const signal of profile.signals) {
+    const signalPower = Math.max(0, Math.min(1, signal.strength * signal.confidence));
+    const direction = aiSignalPolarityAdjustment(signal.polarity);
+    const signalAdjustment = signalPower * AI_PREFERENCE_SIGNAL_ADJUSTMENT_MULTIPLIER * direction;
+    const weightAdjustment = signalPower * AI_PREFERENCE_WEIGHT_DELTA_MULTIPLIER;
+
+    summary.adjustments[signal.factor] = roundAdjustment(
+      clampReviewAdjustment(summary.adjustments[signal.factor] + signalAdjustment)
+    );
+    summary.weightAdjustments[signal.factor] = roundWeightAdjustment(
+      clampReviewWeightAdjustment(summary.weightAdjustments[signal.factor] + weightAdjustment)
+    );
+  }
+
+  summary.signalRecords += profile.signals.length;
+  summary.signature = `${summary.signature}|ai:${profile.signals
+    .map(
+      (signal) =>
+        `${signal.factor}:${signal.polarity}:${roundAdjustment(signal.strength)}:${roundAdjustment(
+          signal.confidence
+        )}`
+    )
+    .join(",")}`;
+  summary.insight = profile.insight ?? summary.insight;
 
   return summary;
 }
@@ -345,7 +435,9 @@ async function loadReviewPreferenceSummary(dogId: string): Promise<ReviewPrefere
 
   const { data, error } = await supabase
     .from("walk_records")
-    .select("rating, liked_factor, disliked_factor")
+    .select(
+      "rating, liked_factor, disliked_factor, liked_notes, disliked_notes, distance_meters, duration_seconds, recommended_course"
+    )
     .eq("dog_id", dogId)
     .not("ended_at", "is", null)
     .order("started_at", { ascending: false })
@@ -359,7 +451,83 @@ async function loadReviewPreferenceSummary(dogId: string): Promise<ReviewPrefere
     throw new AppError(error.message, 500, "WALK_REVIEW_PREFERENCE_LOOKUP_FAILED");
   }
 
-  return summarizeReviewPreferences((data ?? []) as WalkReviewPreferenceRow[]);
+  const rows = (data ?? []) as WalkReviewPreferenceRow[];
+  const summary = summarizeReviewPreferences(rows);
+  const aiProfile = await inferAiPreferenceProfile(rows).catch(() => ({
+    signals: [],
+    insight: null
+  }));
+
+  return mergeAiPreferenceProfile(summary, aiProfile);
+}
+
+function sumRouteWeights(weights: ScoreBreakdown["weights"]): number {
+  return REVIEW_FACTOR_KEYS.reduce((sum, key) => sum + weights[key], 0);
+}
+
+function applyReviewWeightAdjustments(
+  weights: ScoreBreakdown["weights"],
+  preference: ReviewPreferenceSummary
+): ScoreBreakdown["weights"] {
+  const totalBefore = sumRouteWeights(weights);
+  const adjusted: ScoreBreakdown["weights"] = { ...weights };
+
+  for (const key of REVIEW_FACTOR_KEYS) {
+    adjusted[key] += preference.weightAdjustments[key];
+  }
+
+  const totalAfter = sumRouteWeights(adjusted);
+
+  if (totalAfter <= 0) {
+    return weights;
+  }
+
+  const normalizationRatio = totalBefore / totalAfter;
+
+  for (const key of REVIEW_FACTOR_KEYS) {
+    adjusted[key] = roundWeightAdjustment(adjusted[key] * normalizationRatio);
+  }
+
+  return adjusted;
+}
+
+function recalculateScoreBreakdown(
+  breakdown: ScoreBreakdown,
+  weights: ScoreBreakdown["weights"]
+): ScoreBreakdown {
+  const { components } = breakdown;
+  const safetyWeightTotal =
+    weights.riskZones + weights.vehicleExposure + weights.pedestrianSafety;
+  const comfortWeightTotal = weights.environment + weights.familiarity;
+
+  const safety =
+    safetyWeightTotal > 0
+      ? (components.riskZones * weights.riskZones +
+          components.vehicleExposure * weights.vehicleExposure +
+          components.pedestrianSafety * weights.pedestrianSafety) /
+        safetyWeightTotal
+      : breakdown.safety;
+  const comfort =
+    comfortWeightTotal > 0
+      ? (components.environment * weights.environment +
+          components.familiarity * weights.familiarity) /
+        comfortWeightTotal
+      : breakdown.comfort;
+  const totalScore =
+    components.riskZones * weights.riskZones +
+    components.vehicleExposure * weights.vehicleExposure +
+    components.pedestrianSafety * weights.pedestrianSafety +
+    components.environment * weights.environment +
+    components.familiarity * weights.familiarity +
+    components.fit * weights.fit;
+
+  return {
+    ...breakdown,
+    safety,
+    comfort,
+    totalScore,
+    weights
+  };
 }
 
 function applyReviewPreferenceAdjustments(
@@ -372,39 +540,11 @@ function applyReviewPreferenceAdjustments(
 
   return courses
     .map((course) => {
-      const components = { ...course.breakdown.components };
-
-      for (const key of REVIEW_FACTOR_KEYS) {
-        components[key] = Math.max(0, Math.min(1, components[key] + preference.adjustments[key]));
-      }
-
-      const weights = course.breakdown.weights;
-      const safety =
-        (components.riskZones * weights.riskZones +
-          components.vehicleExposure * weights.vehicleExposure +
-          components.pedestrianSafety * weights.pedestrianSafety) /
-        (weights.riskZones + weights.vehicleExposure + weights.pedestrianSafety);
-      const comfort =
-        (components.environment * weights.environment + components.familiarity * weights.familiarity) /
-        (weights.environment + weights.familiarity);
-      const totalScore =
-        components.riskZones * weights.riskZones +
-        components.vehicleExposure * weights.vehicleExposure +
-        components.pedestrianSafety * weights.pedestrianSafety +
-        components.environment * weights.environment +
-        components.familiarity * weights.familiarity +
-        components.fit * weights.fit;
+      const weights = applyReviewWeightAdjustments(course.breakdown.weights, preference);
 
       return {
         ...course,
-        breakdown: {
-          ...course.breakdown,
-          safety,
-          comfort,
-          fit: components.fit,
-          components,
-          totalScore
-        }
+        breakdown: recalculateScoreBreakdown(course.breakdown, weights)
       };
     })
     .sort((a, b) => b.breakdown.totalScore - a.breakdown.totalScore);
@@ -476,14 +616,21 @@ function preferenceDetailSuffix(
   preference: ReviewPreferenceSummary
 ): string {
   const adjustment = preference.adjustments[key];
+  const weightAdjustment = preference.weightAdjustments[key];
 
-  if (adjustment === 0) {
+  if (weightAdjustment === 0) {
     return "";
   }
 
-  return adjustment > 0
-    ? " 최근 리뷰에서 좋았던 점으로 선택되어 가산했어요."
-    : " 최근 리뷰에서 아쉬웠던 점으로 선택되어 감산했어요.";
+  if (adjustment > 0) {
+    return " 최근 리뷰에서 좋았던 점으로 선택되어 이번 추천에서 더 중요하게 봤어요.";
+  }
+
+  if (adjustment < 0) {
+    return " 최근 리뷰에서 아쉬웠던 점으로 선택되어 이번 추천에서 더 엄격하게 봤어요.";
+  }
+
+  return " 최근 리뷰에서 자주 언급되어 이번 추천에서 더 중요하게 봤어요.";
 }
 
 /** Exported for the lightweight GET /duration-options and GET /warnings
