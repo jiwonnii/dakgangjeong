@@ -13,7 +13,7 @@ import {
 
 type Drafts = Record<SharingCareKind, RoutineDraft>;
 
-/** "내일부터 쓸 일정" — 밥/약/산책 횟수와 시간대를 고른다. 저장은 내일부터 반영된다. */
+/** 밥/약/산책 횟수와 시간대를 고른다. 저장은 현재 선택한 날짜부터 반영된다. */
 export function EditPanel({
   drafts,
   isSaving,
@@ -29,7 +29,7 @@ export function EditPanel({
 }) {
   return (
     <article className="rounded-[20px] border border-ms-line bg-ms-card p-[16px] shadow-sm">
-      <h2 className="text-[16px] font-extrabold leading-none text-ms-ink">내일부터 쓸 일정</h2>
+      <h2 className="text-[16px] font-extrabold leading-none text-ms-ink">선택한 날부터 쓸 일정</h2>
 
       <div className="mt-[14px] grid gap-[10px]">
         {SHARING_CARE_KINDS.map((kind) => (
