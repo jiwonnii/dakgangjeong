@@ -5,6 +5,42 @@ import { loadKakaoMaps } from "./kakao-maps";
 import type { LatLon, PetFacility, RecommendedCourse } from "./lib/types";
 
 const COURSE_COLORS = ["#2d7051", "#2f6fd6", "#c07a1a"];
+const FACILITY_MARKER_STYLES: Record<
+  PetFacility["facilityType"],
+  { label: string; background: string; color: string; border: string }
+> = {
+  hospital: { label: "병", background: "#fff1f2", color: "#be123c", border: "#fb7185" },
+  grooming: { label: "미", background: "#eff6ff", color: "#1d4ed8", border: "#60a5fa" },
+  cafe: { label: "카", background: "#f7fee7", color: "#3f6212", border: "#a3e635" },
+  other: { label: "펫", background: "#f8fafc", color: "#334155", border: "#94a3b8" }
+};
+
+function createFacilityOverlayContent(facility: PetFacility) {
+  const style = FACILITY_MARKER_STYLES[facility.facilityType];
+  const wrapper = document.createElement("div");
+  wrapper.style.cssText = [
+    "display:flex",
+    "align-items:center",
+    "gap:4px",
+    "height:28px",
+    "max-width:112px",
+    "padding:0 8px",
+    "border-radius:999px",
+    `border:1px solid ${style.border}`,
+    `background:${style.background}`,
+    `color:${style.color}`,
+    "font-size:11px",
+    "font-weight:800",
+    "line-height:1",
+    "box-shadow:0 2px 8px rgba(15,23,42,0.14)",
+    "white-space:nowrap",
+    "pointer-events:none"
+  ].join(";");
+  wrapper.title = facility.name;
+  wrapper.textContent = style.label;
+
+  return wrapper;
+}
 
 /** 추천 코스들을 지도에 그리고, 지도를 클릭하면 출발지를 바꿀 수 있게 한다. */
 export function KakaoRouteMap({
@@ -75,8 +111,11 @@ export function KakaoRouteMap({
 
         facilities.slice(0, 10).forEach((facility) => {
           const facilityPoint = new maps.LatLng(facility.lat, facility.lon);
-          new maps.Marker({
-            position: facilityPoint
+          new maps.CustomOverlay({
+            position: facilityPoint,
+            content: createFacilityOverlayContent(facility),
+            xAnchor: 0.5,
+            yAnchor: 0.5
           }).setMap(map);
           bounds.extend(facilityPoint);
         });

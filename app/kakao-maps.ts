@@ -20,6 +20,12 @@ export type KakaoMaps = {
     options: { center: KakaoLatLng; level: number }
   ) => KakaoMapInstance;
   Marker: new (options: { position: KakaoLatLng }) => { setMap(map: KakaoMapInstance): void };
+  CustomOverlay: new (options: {
+    position: KakaoLatLng;
+    content: HTMLElement | string;
+    xAnchor?: number;
+    yAnchor?: number;
+  }) => { setMap(map: KakaoMapInstance): void };
   Polyline: new (options: {
     path: KakaoLatLng[];
     strokeWeight: number;
