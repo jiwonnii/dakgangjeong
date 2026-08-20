@@ -179,6 +179,12 @@ function toTask(row: CareTaskRow, guardianName: string | null = null) {
   };
 }
 
+function filterTasksForApplicableRoutines(tasks: CareTaskRow[], routines: CareRoutineRow[]) {
+  const applicableRoutineIds = new Set(routines.map((routine) => routine.id));
+
+  return tasks.filter((task) => task.routine_id === null || applicableRoutineIds.has(task.routine_id));
+}
+
 /**
  * completed_by 로 남은 사용자 id들을 실제 보호자 이름(guardian_profiles.display_name)으로
  * 바꿔줄 Map을 만든다. guardian_profiles 는 auth user id를 그대로 id 컬럼(PK)으로 쓴다
@@ -277,6 +283,18 @@ async function endOverlappingCareRoutines(
 
   if (futureRoutineError) {
     throw new AppError("케어 루틴 변경 예약에 실패했습니다.", 500, "CARE_ROUTINE_REPLACE_FAILED");
+  }
+
+  const { error: taskCleanupError } = await supabase
+    .from("care_tasks")
+    .delete()
+    .eq("dog_id", dogId)
+    .eq("task_type", taskType)
+    .not("routine_id", "is", null)
+    .gte("scheduled_for", startDate);
+
+  if (taskCleanupError) {
+    throw new AppError("기존 케어 일정을 정리하지 못했습니다.", 500, "CARE_ROUTINE_TASK_CLEANUP_FAILED");
   }
 }
 
@@ -447,7 +465,8 @@ export const getTodayCareStatus: RequestHandler = async (req, res, next) => {
       throw new AppError(routineError.message, 500, "CARE_ROUTINE_LOOKUP_FAILED");
     }
 
-    await materializeRoutineTasks((routines ?? []) as CareRoutineRow[], dateKey, userId);
+    const applicableRoutines = (routines ?? []) as CareRoutineRow[];
+    await materializeRoutineTasks(applicableRoutines, dateKey, userId);
 
     const { data: tasks, error: taskError } = await supabase
       .from("care_tasks")
@@ -460,14 +479,16 @@ export const getTodayCareStatus: RequestHandler = async (req, res, next) => {
       throw new AppError(taskError.message, 500, "CARE_TASK_LIST_FAILED");
     }
 
-    const taskRows = (tasks ?? []) as CareTaskRow[];
+    // 루틴 교체 전에 미리 생성된 미래 태스크는 일정 스냅샷으로 남을 수 있다.
+    // 현재 날짜에 적용되는 루틴과 직접 등록 태스크만 노출해 횟수가 누적되지 않게 한다.
+    const taskRows = filterTasksForApplicableRoutines((tasks ?? []) as CareTaskRow[], applicableRoutines);
     const guardianNameById = await lookupGuardianNames(
       taskRows.map((row) => row.completed_by).filter((id): id is string => Boolean(id))
     );
 
     res.json({
       date: dateKey,
-      routines: ((routines ?? []) as CareRoutineRow[]).map(toRoutine),
+      routines: applicableRoutines.map(toRoutine),
       tasks: taskRows.map((row) =>
         toTask(row, row.completed_by ? (guardianNameById.get(row.completed_by) ?? null) : null)
       )
